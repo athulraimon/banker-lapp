@@ -174,15 +174,13 @@ func (c *F1Client) FetchRaceWeekends(ctx context.Context, season int) ([]domain.
 			qualifying = raceTime
 		}
 
-		// Status here is purely the prediction window. "completed" is reserved
-		// for races that have official results (set by an admin) and is applied
-		// separately, so a schedule re-sync never strands entered results.
-		status := "upcoming"
-		switch {
-		case now.After(fp1):
-			status = "locked"
-		case now.After(fp1.Add(-7 * 24 * time.Hour)):
-			status = "open"
+		// Seed a status for the row. This is only a snapshot — every read
+		// recomputes it via domain.DeriveSeasonStatuses, which also accounts for
+		// when the previous race finished. "completed" is applied separately
+		// when an admin enters results, so a re-sync never strands them.
+		status := domain.StatusUpcoming
+		if now.After(fp1) {
+			status = domain.StatusLocked
 		}
 
 		round, _ := strconv.Atoi(r.Round)

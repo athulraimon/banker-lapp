@@ -32,8 +32,12 @@ export default function DashboardScreen() {
     }, [isAuthenticated])
   );
 
-  // A race weekend counts as over ~4h after the race start.
-  const RACE_OVER_BUFFER_MS = 4 * 60 * 60 * 1000;
+  // A Grand Prix counts as finished 2h15m after lights out, at which point the
+  // next one becomes the active GP on the dashboard. Kept in step with
+  // domain.RaceDuration on the backend, which opens the next race's prediction
+  // window at the same moment — if these two drift, the highlighted race and
+  // its "open" badge disagree.
+  const RACE_OVER_BUFFER_MS = (2 * 60 + 15) * 60 * 1000;
   const isWeekendOver = (r: Race) => Date.now() > new Date(r.race_time).getTime() + RACE_OVER_BUFFER_MS;
   // Active GP = the race whose weekend is happening now; once it's over this
   // rolls over to the next upcoming race (races are already ordered by time).

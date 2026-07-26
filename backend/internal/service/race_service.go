@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"banker_lapp_backend/internal/domain"
 	"banker_lapp_backend/internal/repository"
@@ -23,13 +24,47 @@ func NewRaceService(repo *repository.RaceRepository, resultRepo *repository.Resu
 	}
 }
 
+// GetRacesForSeason returns the season's races with their prediction-window
+// status recomputed from the current time.
+//
+// The stored status is only a snapshot from the last schedule sync. Deriving it
+// here means the badge is correct the moment FP1 starts, with no cron job and
+// no writes — and it matches what prediction_service enforces on submission,
+// which has always compared against FP1Time directly.
 func (s *RaceService) GetRacesForSeason(ctx context.Context, season int) ([]domain.Race, error) {
-	// In the real app, we'd cache this in Redis. For now, fetch direct.
-	return s.repo.GetRacesBySeason(ctx, season)
+	races, err := s.repo.GetRacesBySeason(ctx, season)
+	if err != nil {
+		return nil, err
+	}
+	return domain.DeriveSeasonStatuses(races, time.Now()), nil
 }
 
+// GetRaceByID returns a single race with the same derived status as the list
+// view.
+//
+// It loads the season to do so, because a race's window opens when the previous
+// race ends and that is not knowable from the row alone. One extra query for a
+// 22 row table is a fair price for the detail screen never disagreeing with the
+// dashboard about whether a race is open.
 func (s *RaceService) GetRaceByID(ctx context.Context, id string) (*domain.Race, error) {
-	return s.repo.GetRaceByID(ctx, id)
+	race, err := s.repo.GetRaceByID(ctx, id)
+	if err != nil || race == nil {
+		return race, err
+	}
+
+	season, err := s.repo.GetRacesBySeason(ctx, race.Season)
+	if err != nil {
+		// The row itself is still useful; fall back to the stored status.
+		return race, nil
+	}
+
+	for _, r := range domain.DeriveSeasonStatuses(season, time.Now()) {
+		if r.ID == race.ID {
+			derived := r
+			return &derived, nil
+		}
+	}
+	return race, nil
 }
 
 type RaceResultWithPredictions struct {
