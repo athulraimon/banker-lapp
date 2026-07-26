@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { showAlert } from '../../src/components/AppDialog';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -9,7 +9,11 @@ import { racesApi, Race } from '../../src/api/races';
 import { predictionsApi, Prediction } from '../../src/api/predictions';
 import DriverSearchSheet, { DriverSearchSheetRef } from '../../src/components/DriverSearchSheet';
 import LoadingScreen from '../../src/components/LoadingScreen';
+import SegmentedTabs from '../../src/components/SegmentedTabs';
+import RaceInfoPanel from '../../src/components/RaceInfoPanel';
 import { useDrivers } from '../../src/hooks/useDrivers';
+
+type RaceTab = 'predictions' | 'info';
 
 export default function PredictionEditorScreen() {
   const { id } = useLocalSearchParams();
@@ -24,6 +28,10 @@ export default function PredictionEditorScreen() {
     p3_driver_id: ''
   });
   
+  // Predictions lead: that is what people open a race to do. Info is one tap
+  // away for anyone who wants the circuit and session times.
+  const [tab, setTab] = useState<RaceTab>('predictions');
+
   // Which slot is currently being edited
   const [activeSlot, setActiveSlot] = useState<'pole' | 'p1' | 'p2' | 'p3' | null>(null);
   
@@ -109,29 +117,48 @@ export default function PredictionEditorScreen() {
           {race.status === 'locked' && <Text style={styles.lockedWarning}>LOCKED</Text>}
         </View>
 
-        <View style={styles.content}>
-          <View style={{ marginBottom: 16 }}>
-            <Text style={styles.raceTitle}>{race.grand_prix.toUpperCase()} GRID</Text>
-            <Text style={styles.raceSubtitle}>Submit positions. Driver duplication drops validation errors.</Text>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentInner}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={{ marginBottom: 14 }}>
+            <Text style={styles.raceTitle}>{race.grand_prix.toUpperCase()}</Text>
+            <Text style={styles.raceSubtitle}>{race.circuit_name}</Text>
           </View>
 
-          <Text style={typography.sectionHeaderCompact}>Qualifying Performance</Text>
-          {renderSlot('pole', 'POLE', colors.accentGold)}
+          <SegmentedTabs<RaceTab>
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'predictions', label: 'Predictions' },
+              { value: 'info', label: 'Info' },
+            ]}
+          />
 
-          <Text style={typography.sectionHeaderCompact}>Podium Grid Lineup</Text>
-          {renderSlot('p1', 'P1', colors.f1Red)}
-          {renderSlot('p2', 'P2', colors.textSecondary)}
-          {renderSlot('p3', 'P3', colors.textSecondary)}
+          {tab === 'predictions' ? (
+            <>
+              <Text style={typography.sectionHeaderCompact}>Qualifying Performance</Text>
+              {renderSlot('pole', 'POLE', colors.accentGold)}
 
-          <TouchableOpacity 
-            style={[styles.btn, race.status === 'locked' && { opacity: 0.5 }]} 
-            onPress={handleSave}
-            disabled={race.status === 'locked'}
-          >
-            <Text style={styles.btnText}>Save Submissions</Text>
-          </TouchableOpacity>
-        </View>
-        
+              <Text style={typography.sectionHeaderCompact}>Podium Grid Lineup</Text>
+              {renderSlot('p1', 'P1', colors.f1Red)}
+              {renderSlot('p2', 'P2', colors.textSecondary)}
+              {renderSlot('p3', 'P3', colors.textSecondary)}
+
+              <TouchableOpacity
+                style={[styles.btn, race.status === 'locked' && { opacity: 0.5 }]}
+                onPress={handleSave}
+                disabled={race.status === 'locked'}
+              >
+                <Text style={styles.btnText}>Save Submissions</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <RaceInfoPanel race={race} />
+          )}
+        </ScrollView>
+
         <DriverSearchSheet 
           ref={bottomSheetRef} 
           onSelectDriver={onSelectDriver}
@@ -170,7 +197,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  // The Info tab is taller than the viewport on a phone, so the screen scrolls
+  // now. Bottom padding keeps the last row clear of the tab bar.
+  contentInner: {
     padding: 16,
+    paddingBottom: 40,
   },
   raceTitle: {
     fontFamily: 'SpaceGrotesk-Bold',

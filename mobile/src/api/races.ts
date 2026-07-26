@@ -11,6 +11,13 @@ export interface Race {
   race_time: string;
   season: number;
   status: string; // "upcoming", "open", "locked", "completed"
+
+  // Optional: a sprint weekend has no FP2/FP3, a normal one has no sprint.
+  // Absent sessions are omitted by the API rather than sent as a zero time.
+  fp2_time?: string | null;
+  fp3_time?: string | null;
+  sprint_qualifying_time?: string | null;
+  sprint_time?: string | null;
 }
 
 export interface RaceResult {

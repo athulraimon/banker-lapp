@@ -31,6 +31,14 @@ type Race struct {
 	RaceTime       time.Time `json:"race_time"`
 	Season         int       `json:"season"`
 	Status         string    `json:"status"` // "upcoming", "open", "locked", "completed"
+
+	// The rest of the weekend. Pointers because no weekend has all of them: a
+	// sprint weekend swaps FP2 and FP3 for sprint qualifying and the sprint, so
+	// these serialise as null rather than as a misleading zero timestamp.
+	FP2Time              *time.Time `json:"fp2_time,omitempty"`
+	FP3Time              *time.Time `json:"fp3_time,omitempty"`
+	SprintQualifyingTime *time.Time `json:"sprint_qualifying_time,omitempty"`
+	SprintTime           *time.Time `json:"sprint_time,omitempty"`
 }
 
 // IsOver reports whether the race has finished, and therefore whether the next

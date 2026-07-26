@@ -55,11 +55,14 @@ type ergastRace struct {
 			Country  string `json:"country"`
 		} `json:"Location"`
 	} `json:"Circuit"`
-	FirstPractice *ergastEvent `json:"FirstPractice"`
-	Qualifying    *ergastEvent `json:"Qualifying"`
+	FirstPractice  *ergastEvent `json:"FirstPractice"`
+	SecondPractice *ergastEvent `json:"SecondPractice"`
+	ThirdPractice  *ergastEvent `json:"ThirdPractice"`
+	Qualifying     *ergastEvent `json:"Qualifying"`
 	// Sprint weekends replace FP2/FP3; sprint qualifying can precede FP1 in
 	// wall-clock terms, but FP1 is still the first on-track session.
 	SprintQualifying *ergastEvent `json:"SprintQualifying"`
+	Sprint           *ergastEvent `json:"Sprint"`
 }
 
 type ergastRacesResponse struct {
@@ -195,6 +198,13 @@ func (c *F1Client) FetchRaceWeekends(ctx context.Context, season int) ([]domain.
 			RaceTime:       raceTime,
 			Season:         season,
 			Status:         status,
+
+			// Optional sessions: absent ones stay nil so the app can omit the
+			// row rather than print a placeholder time.
+			FP2Time:              optionalTime(r.SecondPractice),
+			FP3Time:              optionalTime(r.ThirdPractice),
+			SprintQualifyingTime: optionalTime(r.SprintQualifying),
+			SprintTime:           optionalTime(r.Sprint),
 		})
 	}
 
@@ -293,6 +303,17 @@ func driverCode(d ergastDriver) string {
 		return d.Code
 	}
 	return ""
+}
+
+// optionalTime returns nil for a session this weekend doesn't have, which is
+// what distinguishes "no FP2 because it's a sprint weekend" from "FP2 at the
+// zero time".
+func optionalTime(e *ergastEvent) *time.Time {
+	t := eventTime(e)
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 func eventTime(e *ergastEvent) time.Time {
