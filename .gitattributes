@@ -1,0 +1,22 @@
+# Normalise line endings. Git warned that package-lock.json would gain CRLF on
+# checkout; that is harmless for JSON, but the same conversion applied to a
+# shell script makes it fail on Linux with "bad interpreter: /bin/bash^M" —
+# which is exactly where Render builds run.
+* text=auto eol=lf
+
+# Files that must keep LF regardless of platform.
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+*.sql  text eol=lf
+
+# Windows-only helpers are more predictable with CRLF.
+*.ps1  text eol=crlf
+
+# Binary — never convert.
+*.png  binary
+*.jpg  binary
+*.ttf  binary
+*.keystore binary
+*.apk  binary
