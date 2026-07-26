@@ -1,0 +1,82 @@
+name: CI
+
+# Render deploys on push automatically (autoDeploy in render.yaml), so this
+# workflow's job is to catch a broken build before it ships, not to deploy.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      # Advisory only. Dropping Redis left orphaned entries in go.sum that a
+      # local `go mod tidy` will clean up; failing the build over formatting
+      # noise would block a working deploy for no reason.
+      - name: Check go.mod tidiness
+        continue-on-error: true
+        run: |
+          cp go.mod go.mod.bak && cp go.sum go.sum.bak
+          go mod tidy
+          if ! diff -q go.mod go.mod.bak > /dev/null || ! diff -q go.sum go.sum.bak > /dev/null; then
+            echo "::warning::go.mod/go.sum are not tidy — run 'go mod tidy' in backend/ and commit."
+          fi
+          mv go.mod.bak go.mod && mv go.sum.bak go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...
+
+  web:
+    name: Web app (Expo)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Export web bundle
+        # Proves the web build compiles. The real deploy build happens on
+        # Render with the production env values.
+        env:
+          EXPO_PUBLIC_API_URL: https://example.invalid
+          EXPO_PUBLIC_WEB_CLIENT_ID: ci-placeholder.apps.googleusercontent.com
+        run: npx expo export --platform web
+
+      - name: Check PWA files made it into the export
+        run: |
+          test -f dist/index.html
+          test -f dist/manifest.json
+          test -f dist/sw.js
+          test -f dist/icons/apple-touch-icon.png

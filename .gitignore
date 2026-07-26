@@ -1,0 +1,45 @@
+# Secrets — backend/.env holds the JWT secret and OAuth client ID.
+# Never commit these; Render holds the production values.
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Build output
+dist/
+web-build/
+backend/tmp/
+*.apk
+*.aab
+
+# Signing material
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+keystore.properties
+
+# Dependencies
+node_modules/
+
+# Expo / native
+.expo/
+android/
+ios/
+expo-env.d.ts
+.metro-health-check*
+
+# Editors / OS / local tooling
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/
+*.swp
+
+# Logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*

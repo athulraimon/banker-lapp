@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "version": ">= 21.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://banker-lapp-api.onrender.com",
+        "EXPO_PUBLIC_WEB_CLIENT_ID": "262100083196-qqh72qa36v9toeg2h2igmtl113bbmvs1.apps.googleusercontent.com"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://banker-lapp-api.onrender.com",
+        "EXPO_PUBLIC_WEB_CLIENT_ID": "262100083196-qqh72qa36v9toeg2h2igmtl113bbmvs1.apps.googleusercontent.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

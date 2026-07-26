@@ -1,0 +1,4 @@
+.env
+*.exe
+banker_lapp.exe
+*.log

@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Banker Lapp",
+    "slug": "banker-lapp",
+    "scheme": "bankerlapp",
+    "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "usesCleartextTraffic": true,
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.athulraimon.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Banker Lapp",
+      "shortName": "Banker Lapp",
+      "themeColor": "#0b0c10",
+      "backgroundColor": "#0b0c10",
+      "display": "standalone",
+      "orientation": "portrait",
+      "description": "Formula 1 Private Predictions Championship",
+      "lang": "en",
+      "startUrl": "/"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f9252c7f-c4bc-4680-abb8-c61f53ad242c"
+      }
+    },
+    "owner": "athulraimon",
+    "updates": {
+      "url": "https://u.expo.dev/f9252c7f-c4bc-4680-abb8-c61f53ad242c"
+    }
+  }
+}

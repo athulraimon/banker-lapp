@@ -1,0 +1,26 @@
+# Local development infrastructure. Postgres is the only stateful dependency —
+# refresh tokens and the driver cache moved out of Redis, so production is a
+# single container plus a managed database.
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: banker_lapp_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: banker_lapp
+    ports:
+      # Host 5433 -> container 5432. A native PostgreSQL service often already
+      # owns 5432 on Windows; publishing on 5433 keeps the two independent.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d banker_lapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:

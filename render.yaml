@@ -1,0 +1,102 @@
+# Render Blueprint — one API container + one Postgres, both on the free tier.
+#
+# Deploy: push this repo to GitHub, then Render Dashboard -> New -> Blueprint,
+# point it at the repo. Render reads this file, creates both services, and wires
+# DATABASE_URL automatically. After that every push to `main` redeploys on its
+# own — no manual deploy step, which was the point of the restructure.
+#
+# Free-tier caveat: the web service sleeps after 15 minutes with no traffic and
+# takes ~50s to wake. See .github/workflows/keepalive.yml for the ping that keeps
+# it warm during race weekends.
+
+databases:
+  - name: banker-lapp-db
+    databaseName: banker_lapp
+    user: banker_lapp
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: banker-lapp-api
+    runtime: docker
+    plan: free
+    region: oregon
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Render routes traffic here only once this returns 200. /ready pings the
+    # database; /health would pass before migrations finished.
+    healthCheckPath: /ready
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+
+      # Render injects the connection string from the database above.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: banker-lapp-db
+          property: connectionString
+
+      # Generated once by Render and kept across deploys, so existing sessions
+      # survive a redeploy.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Set these in the Render dashboard — they are account-specific.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+
+      # The PWA runs on a different origin than the API, so CORS must name it
+      # explicitly. Set to your deployed web URL, e.g.
+      # https://banker-lapp.pages.dev
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      - key: DEFAULT_SEASON
+        value: "2026"
+      - key: AUTO_MIGRATE
+        value: "true"
+      # Belt and braces: production forces this off anyway.
+      - key: ENABLE_DEV_LOGIN
+        value: "false"
+      - key: PORT
+        value: "8080"
+
+  # The PWA. A Render static site is free and unmetered, and keeping it in the
+  # same blueprint means one dashboard and one git push deploys both halves.
+  - type: web
+    name: banker-lapp-web
+    runtime: static
+    rootDir: mobile
+    buildCommand: npm ci --legacy-peer-deps && npx expo export --platform web
+    staticPublishPath: ./dist
+    autoDeploy: true
+    envVars:
+      # Baked into the bundle at build time. Point at the API service above.
+      - key: EXPO_PUBLIC_API_URL
+        sync: false
+      - key: EXPO_PUBLIC_WEB_CLIENT_ID
+        sync: false
+    routes:
+      # Expo Router exports a single-page app, so every path must serve
+      # index.html or a hard refresh on /race/123 would 404. This also matters
+      # for the OAuth redirect, which lands back on the site root.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      # The service worker must never be served stale, or a deploy can be
+      # pinned to an old shell indefinitely.
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banker Lapp — Mobile UI Design System & Prototypes</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&display=swap');
+
+        :root {
+            /* F1 Minimalist Palette */
+            --bg-carbon: #0b0c10;
+            --bg-card: #14161d;
+            --bg-card-header: #1b1e27;
+            --f1-red: #e10600;
+            --f1-red-hover: #b80500;
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #222531;
+            --accent-green: #00f5d4;
+            --accent-gold: #ffb703;
+            
+            /* Status Colors */
+            --status-open: #00f5d4;
+            --status-locked: #ff3333;
+            --status-completed: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #050508;
+            color: var(--text-primary);
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 30px;
+        }
+
+        header h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: -1px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        header h1 span {
+            color: var(--f1-red);
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-top: 8px;
+        }
+
+        /* Section Titles */
+        .section-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 40px 0 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-left: 4px solid var(--f1-red);
+            padding-left: 12px;
+        }
+
+        /* Layout Grid for Phone Frames */
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 40px;
+            justify-items: center;
+            margin-bottom: 60px;
+        }
+
+        /* Phone Frame Simulation */
+        .phone-frame {
+            width: 360px;
+            height: 740px;
+            background-color: var(--bg-carbon);
+            border: 8px solid #222;
+            border-radius: 40px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Phone Notch / Status Bar */
+        .status-bar {
+            height: 30px;
+            background-color: var(--bg-carbon);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 24px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            z-index: 10;
+        }
+
+        .status-bar .notch {
+            width: 110px;
+            height: 18px;
+            background-color: #222;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* App Header Inside Phone */
+        .app-header {
+            height: 56px;
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+        }
+
+        .app-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .app-title span {
+            color: var(--f1-red);
+        }
+
+        .profile-bubble {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: var(--f1-red);
+            border: 1.5px solid var(--text-primary);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        /* Main Content Container inside Phone */
+        .app-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            padding-bottom: 80px; /* space for navbar */
+        }
+
+        /* Hide Scrollbar for clean UI mockup */
+        .app-content::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* App Bottom Navigation Bar */
+        .app-nav {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            background-color: rgba(20, 22, 29, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: 500;
+            text-decoration: none;
+            gap: 4px;
+            transition: color 0.2s;
+        }
+
+        .nav-item.active {
+            color: var(--f1-red);
+        }
+
+        .nav-icon {
+            font-size: 1.2rem;
+        }
+
+        /* UI Atomic Components */
+        .card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            background-color: var(--bg-card-header);
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-body {
+            padding: 16px;
+        }
+
+        /* Badge/Tag */
+        .badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.open { background: rgba(0, 245, 212, 0.15); color: var(--status-open); border: 1px solid rgba(0, 245, 212, 0.3); }
+        .badge.locked { background: rgba(255, 51, 51, 0.15); color: var(--status-locked); border: 1px solid rgba(255, 51, 51, 0.3); }
+        .badge.completed { background: rgba(148, 163, 184, 0.15); color: var(--text-secondary); border: 1px solid rgba(148, 163, 184, 0.3); }
+
+        /* Countdown timer component */
+        .countdown-strip {
+            background: linear-gradient(90deg, #e10600 0%, #7a0300 100%);
+            padding: 10px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .countdown-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .countdown-time {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        /* Driver Prediction Slot Inputs */
+        .prediction-slot {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .prediction-slot:focus-within {
+            border-color: var(--f1-red);
+        }
+
+        .slot-tag {
+            width: 60px;
+            background: var(--bg-card-header);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid var(--border-color);
+            padding: 14px 0;
+        }
+        
+        .prediction-slot.pole-slot .slot-tag { color: var(--accent-gold); }
+        .prediction-slot.p1-slot .slot-tag { color: var(--f1-red); }
+
+        .slot-input-trigger {
+            flex: 1;
+            padding: 0 14px;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .slot-input-trigger .placeholder {
+            color: var(--text-muted);
+        }
+
+        .driver-team-pill {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            background: rgba(255,255,255,0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Leaderboard Items */
+        .leaderboard-row {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.2s;
+        }
+        .leaderboard-row:last-child {
+            border-bottom: none;
+        }
+
+        .rank {
+            width: 32px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+        
+        .leaderboard-row:nth-child(1) .rank { color: var(--accent-gold); font-size: 1.1rem; }
+        .leaderboard-row:nth-child(2) .rank { color: #e2e8f0; }
+        .leaderboard-row:nth-child(3) .rank { color: #cd7f32; }
+
+        .user-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .user-stats-inline {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .points-badge {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.04);
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .leaderboard-row:nth-child(1) .points-badge {
+            border-color: rgba(255, 183, 3, 0.3);
+            background: rgba(255, 183, 3, 0.05);
+        }
+
+        /* Result Checkboxes for past results screen */
+        .result-row-comparison {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .result-row-comparison:last-child { border-bottom: none; }
+
+        .comp-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .comp-val {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .comp-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+        }
+        .comp-status.hit { background: rgba(0, 245, 212, 0.15); color: var(--accent-green); font-size: 0.8rem; }
+        .comp-status.miss { background: rgba(255, 51, 51, 0.1); color: var(--status-locked); font-size: 0.8rem; }
+
+        /* Button Component */
+        .btn {
+            background-color: var(--f1-red);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            width: 100%;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-family: 'Space Grotesk', sans-serif;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            background-color: var(--f1-red-hover);
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .btn-secondary:hover {
+            background-color: rgba(255,255,255,0.05);
+        }
+
+        /* Typography helpers */
+        .section-header-compact {
+            font-family: 'Space Grotesk', sans-serif;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            margin-top: 8px;
+        }
+
+        /* Technical Specs Block */
+        .design-spec-box {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 40px;
+            width: 100%;
+        }
+
+        .spec-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .spec-item h4 {
+            font-family: 'Space Grotesk', sans-serif;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            color: var(--f1-red);
+            margin-bottom: 6px;
+        }
+
+        .spec-item p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .color-swatch-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .swatch {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Driver Search Dropdown Sheet Simulation */
+        .modal-simulation {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-card);
+            border-top: 2px solid var(--f1-red);
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            padding: 16px;
+            z-index: 20;
+            box-shadow: 0 -10px 25px rgba(0,0,0,0.5);
+        }
+
+        .search-bar {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .search-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 6px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-size: 0.9rem;
+        }
+        .search-item.selected {
+            color: var(--f1-red);
+            font-weight: 600;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Banker <span>Lapp</span></h1>
+            <p>Formula 1 Private Predictions Championship — Mobile Design Blueprint</p>
+        </header>
+
+        <!-- Design Principles & Guidelines -->
+        <div class="design-spec-box">
+            <h3 style="font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; font-size: 1.2rem;">🎨 Design Foundations & Token Guide</h3>
+            <div class="spec-grid">
+                <div class="spec-item">
+                    <h4>The Aesthetic</h4>
+                    <p>A hybrid design pairing the official high-contrast Formula 1 trackside branding with a premium, sleek dark-mode setup engineered specifically for mobile devices.</p>
+                </div>
+                <div class="spec-item">
+                    <h4>Color Tokens</h4>
+                    <div class="color-swatch-group">
+                        <div class="swatch" style="background: #0b0c10;" title="Carbon Dark BG"></div>
+                        <div class="swatch" style="background: #14161d;" title="Card Base"></div>
+                        <div class="swatch" style="background: #e10600;" title="F1 Racing Red"></div>
+                        <div class="swatch" style="background: #00f5d4;" title="Neon Podium Teal"></div>
+                    </div>
+                    <p style="font-size: 0.75rem; margin-top: 5px;">Primary Base: Carbon (#0b0c10)<br>Accent Highlight: F1 Red (#e10600)</p>
+                </div>
+                <div class="spec-item">
+                    <h4>Typography Rules</h4>
+                    <p><strong>Headings:</strong> Space Grotesk (Aggressive, geometric, performance-tuned architecture).<br><strong>UI Body elements:</strong> Outfit (Clean, premium readability on screens).</p>
+                </div>
+                <div class="spec-item">
+                    <h4>UX Mechanics</h4>
+                    <p>Strict prediction enforcement engine running rules on top of FP1 start. Zero-friction dropdown mechanics built to stop accidental duplicate selections across race slots.</p>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Screen Mockups & Interactions</h2>
+        
+        <div class="preview-grid">
+
+            <!-- Screen 1: Dashboard / Race Calendar -->
+            <div class="phone-frame">
+                <div class="status-bar">
+                    <span>12:44</span>
+                    <div class="notch"></div>
+                    <span>5G 🔋</span>
+                </div>
+                <div class="app-header">
+                    <div class="app-title">Banker<span>Lapp</span></div>
+                    <div class="profile-bubble" title="Admin User">M</div>
+                </div>
+                
+                <div class="app-content">
+                    <div class="section-header-compact">Active Grand Prix</div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 style="font-size: 1rem; font-weight:700;">Monaco Grand Prix</h3>
+                                <p style="font-size: 0.75rem; color: var(--text-secondary);">Circuit de Monaco</p>
+                            </div>
+                            <span class="badge open">Predictions Open</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="countdown-strip">
+                                <span class="countdown-label">Closes at FP1:</span>
+                                <span class="countdown-time">02d : 14h : 15m</span>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+                                Lock in your ultimate grid lineup predictions before Friday practice opens trackside.
+                            </p>
+                            <button class="btn">Predict Now</button>
+                        </div>
+                    </div>
+
+                    <div class="section-header-compact">Upcoming Calendar Schedule</div>
+                    
+                    <div class="card" style="opacity: 0.7;">
+                        <div class="card-header">
+                            <div>
+                                <h3 style="font-size: 0.9rem; font-weight:600;">Spanish Grand Prix</h3>
+                                <p style="font-size: 0.7rem; color: var(--text-secondary);">Circuit de Barcelona-Catalunya</p>
+                            </div>
+                            <span class="badge completed" style="color: var(--text-muted);">Locked</span>
+                        </div>
+                    </div>
+
+                    <div class="card" style="opacity: 0.7;">
+                        <div class="card-header">
+                            <div>
+                                <h3 style="font-size: 0.9rem; font-weight:600;">Canadian Grand Prix</h3>
+                                <p style="font-size: 0.7rem; color: var(--text-secondary);">Circuit Gilles-Villeneuve</p>
+                            </div>
+                            <span class="badge completed" style="color: var(--text-muted);">Locked</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="app-nav">
+                    <a href="#" class="nav-item active">
+                        <span class="nav-icon">🏁</span>
+                        <span>Races</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📊</span>
+                        <span>Standings</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🛡️</span>
+                        <span>Admin</span>
+                    </a>
+                </div>
+            </div>
+
+
+            <!-- Screen 2: Prediction Editor Sheet Grid Selection -->
+            <div class="phone-frame">
+                <div class="status-bar">
+                    <span>12:44</span>
+                    <div class="notch"></div>
+                    <span>5G 🔋</span>
+                </div>
+                <div class="app-header">
+                    <div class="app-title">Edit Predictions</div>
+                    <span style="font-size:0.75rem; color: var(--accent-green); font-weight:600;">FP1 Lock Warning</span>
+                </div>
+                
+                <div class="app-content" style="padding-bottom: 180px;">
+                    <div style="margin-bottom: 16px;">
+                        <h3 style="font-size: 1.1rem; font-family:'Space Grotesk';">MONACO GP GRID</h3>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary);">Submit positions. Driver duplication drops validation errors.</p>
+                    </div>
+
+                    <div class="section-header-compact">Qualifying Performance</div>
+                    <div class="prediction-slot pole-slot">
+                        <div class="slot-tag">POLE</div>
+                        <div class="slot-input-trigger">
+                            <span>Max Verstappen</span>
+                            <span class="driver-team-pill">RBR</span>
+                        </div>
+                    </div>
+
+                    <div class="section-header-compact">Podium Grid Lineup</div>
+                    <div class="prediction-slot p1-slot">
+                        <div class="slot-tag">P1</div>
+                        <div class="slot-input-trigger">
+                            <span>Charles Leclerc</span>
+                            <span class="driver-team-pill">FERRARI</span>
+                        </div>
+                    </div>
+
+                    <div class="prediction-slot">
+                        <div class="slot-tag">P2</div>
+                        <div class="slot-input-trigger">
+                            <span class="placeholder">Select P2 Driver...</span>
+                            <span>⚡</span>
+                        </div>
+                    </div>
+
+                    <div class="prediction-slot">
+                        <div class="slot-tag">P3</div>
+                        <div class="slot-input-trigger">
+                            <span>Lando Norris</span>
+                            <span class="driver-team-pill">MCLAREN</span>
+                        </div>
+                    </div>
+
+                    <button class="btn" style="margin-top: 15px;">Save Submissions</button>
+                </div>
+
+                <!-- Simulating React Native Bottom Sheet Search Interaction for P2 Selection -->
+                <div class="modal-simulation">
+                    <div style="width: 40px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; margin: 0 auto 12px auto;"></div>
+                    <div class="search-bar">
+                        <span>Search Driver (e.g. NOR, HAM, VER)...</span>
+                        <span>🔍</span>
+                    </div>
+                    <div class="search-item">
+                        <span>Lewis Hamilton <small style="color:var(--text-muted);">FERRARI</small></span>
+                        <span style="color: var(--text-muted); font-size: 0.75rem;">Select</span>
+                    </div>
+                    <div class="search-item selected">
+                        <span>Lando Norris <small style="color:var(--text-muted);">MCLAREN</small></span>
+                        <span style="font-size: 0.75rem;">Selected in P3</span>
+                    </div>
+                    <div class="search-item">
+                        <span>Oscar Piastri <small style="color:var(--text-muted);">MCLAREN</small></span>
+                        <span style="color: var(--text-muted); font-size: 0.75rem;">Select</span>
+                    </div>
+                    <div class="search-item">
+                        <span>George Russell <small style="color:var(--text-muted);">MERCEDES</small></span>
+                        <span style="color: var(--text-muted); font-size: 0.75rem;">Select</span>
+                    </div>
+                </div>
+
+                <div class="app-nav" style="opacity: 0.2; pointer-events: none;">
+                    <div class="nav-item"><span class="nav-icon">🏁</span><span>Races</span></div>
+                    <div class="nav-item"><span class="nav-icon">📊</span><span>Standings</span></div>
+                    <div class="nav-item"><span class="nav-icon">🛡️</span><span>Admin</span></div>
+                </div>
+            </div>
+
+
+            <!-- Screen 3: Global Championship Standings Leaderboard -->
+            <div class="phone-frame">
+                <div class="status-bar">
+                    <span>12:44</span>
+                    <div class="notch"></div>
+                    <span>5G 🔋</span>
+                </div>
+                <div class="app-header">
+                    <div class="app-title">Championship</div>
+                    <div style="font-size: 0.75rem; font-weight:600; color: var(--text-secondary);">2026 Season</div>
+                </div>
+
+                <div class="app-content">
+                    <div class="card" style="background: linear-gradient(135deg, var(--bg-card-header) 0%, var(--bg-card) 100%);">
+                        <div class="card-body" style="display:flex; justify-content: space-between; align-items:center; padding: 14px;">
+                            <div>
+                                <p style="font-size:0.7rem; color: var(--text-muted); text-transform: uppercase;">Your Standing</p>
+                                <h4 style="font-family:'Space Grotesk'; font-size:1.1rem; font-weight:700;">Rank #2 <span style="font-weight:400; font-size:0.85rem; color:var(--accent-green); font-family:'Outfit';">(-12 pts)</span></h4>
+                            </div>
+                            <div style="text-align: right;">
+                                <p style="font-size:0.7rem; color: var(--text-muted); text-transform: uppercase;">Total Score</p>
+                                <h4 style="font-family:'Space Grotesk'; font-size:1.1rem; font-weight:700; color: var(--f1-red);">154 PTS</h4>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-header-compact">Global Driver Leaderboard</div>
+
+                    <div class="card">
+                        <!-- Rank 1 -->
+                        <div class="leaderboard-row">
+                            <div class="rank">01</div>
+                            <div class="user-info">
+                                <div>
+                                    <span class="user-name">Alex_F1_Podium</span>
+                                    <div class="user-stats-inline">🏆 8 Winners · 🎯 12 Poles</div>
+                                </div>
+                            </div>
+                            <div class="points-badge">166</div>
+                        </div>
+
+                        <!-- Rank 2 (Current User Highlighted) -->
+                        <div class="leaderboard-row" style="background: rgba(225, 6, 0, 0.05); border-left: 3px solid var(--f1-red); padding-left: 9px;">
+                            <div class="rank">02</div>
+                            <div class="user-info">
+                                <div>
+                                    <span class="user-name">You (MaxFan)</span>
+                                    <div class="user-stats-inline">🏆 6 Winners · 🎯 10 Poles</div>
+                                </div>
+                            </div>
+                            <div class="points-badge" style="color: var(--f1-red); font-weight: 800;">154</div>
+                        </div>
+
+                        <!-- Rank 3 -->
+                        <div class="leaderboard-row">
+                            <div class="rank">03</div>
+                            <div class="user-info">
+                                <div>
+                                    <span class="user-name">CircuitKing26</span>
+                                    <div class="user-stats-inline">🏆 5 Winners · 🎯 11 Poles</div>
+                                </div>
+                            </div>
+                            <div class="points-badge">142</div>
+                        </div>
+
+                        <!-- Rank 4 -->
+                        <div class="leaderboard-row">
+                            <div class="rank">04</div>
+                            <div class="user-info">
+                                <div>
+                                    <span class="user-name">BoxBoxBox</span>
+                                    <div class="user-stats-inline">🏆 4 Winners · 🎯 7 Poles</div>
+                                </div>
+                            </div>
+                            <div class="points-badge">128</div>
+                        </div>
+
+                        <!-- Rank 5 -->
+                        <div class="leaderboard-row">
+                            <div class="rank">05</div>
+                            <div class="user-info">
+                                <div>
+                                    <span class="user-name">SupaSofts</span>
+                                    <div class="user-stats-inline">🏆 3 Winners · 🎯 8 Poles</div>
+                                </div>
+                            </div>
+                            <div class="points-badge">115</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="app-nav">
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🏁</span>
+                        <span>Races</span>
+                    </a>
+                    <a href="#" class="nav-item active">
+                        <span class="nav-icon">📊</span>
+                        <span>Standings</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🛡️</span>
+                        <span>Admin</span>
+                    </a>
+                </div>
+            </div>
+
+
+            <!-- Screen 4: Historical Breakdown / Race Results Evaluation -->
+            <div class="phone-frame">
+                <div class="status-bar">
+                    <span>12:44</span>
+                    <div class="notch"></div>
+                    <span>5G 🔋</span>
+                </div>
+                <div class="app-header">
+                    <div class="app-title">Race Breakdown</div>
+                    <span class="badge completed">Finished</span>
+                </div>
+
+                <div class="app-content">
+                    <div style="text-align: center; margin-bottom: 20px; background: var(--bg-card); padding: 16px; border-radius:12px; border: 1px solid var(--border-color);">
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Round 4 results</p>
+                        <h2 style="font-family:'Space Grotesk'; font-size: 1.4rem; font-weight:800; margin: 4px 0;">Emilia Romagna GP</h2>
+                        <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-green); font-family: 'Space Grotesk'; margin-top: 8px;">+28 <span style="font-size:0.85rem; font-family:'Outfit'; font-weight:400; color:var(--text-secondary);">Points Earned</span></div>
+                    </div>
+
+                    <div class="section-header-compact">Exact Match Score Validation</div>
+
+                    <div class="card">
+                        <div class="card-body" style="padding: 12px 16px;">
+                            <div style="display: grid; grid-template-columns: 1fr auto 1fr; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; margin-bottom: 6px;">
+                                <span class="comp-label">Your Bet</span>
+                                <span></span>
+                                <span class="comp-label" style="text-align: right;">Official</span>
+                            </div>
+
+                            <!-- POLE ROW -->
+                            <div class="result-row-comparison">
+                                <div>
+                                    <div class="comp-val">Verstappen</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">Red Bull</div>
+                                </div>
+                                <div class="comp-status hit" title="Correct (+5 Pts)">✓</div>
+                                <div style="text-align: right;">
+                                    <div class="comp-val">Verstappen</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">POLE · 5 Pts</div>
+                                </div>
+                            </div>
+
+                            <!-- P1 ROW -->
+                            <div class="result-row-comparison">
+                                <div>
+                                    <div class="comp-val">Verstappen</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">Red Bull</div>
+                                </div>
+                                <div class="comp-status hit" title="Correct (+15 Pts)">✓</div>
+                                <div style="text-align: right;">
+                                    <div class="comp-val">Verstappen</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">P1 · 15 Pts</div>
+                                </div>
+                            </div>
+
+                            <!-- P2 ROW -->
+                            <div class="result-row-comparison">
+                                <div>
+                                    <div class="comp-val">Leclerc</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">Ferrari</div>
+                                </div>
+                                <div class="comp-status miss" title="Missed (0 Pts)">✕</div>
+                                <div style="text-align: right;">
+                                    <div class="comp-val">Norris</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">P2 · 10 Pts</div>
+                                </div>
+                            </div>
+
+                            <!-- P3 ROW -->
+                            <div class="result-row-comparison">
+                                <div>
+                                    <div class="comp-val">Leclerc</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">Ferrari</div>
+                                </div>
+                                <div class="comp-status hit" title="Correct (+8 Pts)">✓</div>
+                                <div style="text-align: right;">
+                                    <div class="comp-val">Leclerc</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">P3 · 8 Pts</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary">View Global Round Standings</button>
+                </div>
+
+                <div class="app-nav">
+                    <a href="#" class="nav-item active">
+                        <span class="nav-icon">🏁</span>
+                        <span>Races</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📊</span>
+                        <span>Standings</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🛡️</span>
+                        <span>Admin</span>
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>
