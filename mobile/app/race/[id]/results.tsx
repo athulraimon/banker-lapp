@@ -6,6 +6,10 @@ import { typography } from '../../../src/theme/typography';
 import { racesApi, Race, RaceResultWithPredictions } from '../../../src/api/races';
 import { predictionsApi, Prediction } from '../../../src/api/predictions';
 import LoadingScreen from '../../../src/components/LoadingScreen';
+import SegmentedTabs from '../../../src/components/SegmentedTabs';
+import RaceInfoPanel from '../../../src/components/RaceInfoPanel';
+
+type RaceTab = 'predictions' | 'info';
 
 export default function RaceResultsScreen() {
   const { id } = useLocalSearchParams();
@@ -13,6 +17,9 @@ export default function RaceResultsScreen() {
   const [race, setRace] = useState<Race | null>(null);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResultWithPredictions | null>(null);
+  // Mirrors the prediction editor so a race feels the same whether it is open
+  // or locked: results lead, circuit and session times sit behind Info.
+  const [tab, setTab] = useState<RaceTab>('predictions');
 
   useEffect(() => {
     if (id) {
@@ -124,8 +131,21 @@ export default function RaceResultsScreen() {
           <Text style={styles.pointsEarned}>+{userScore?.points || 0} <Text style={styles.pointsLabel}>Points Earned</Text></Text>
         </View>
 
+        <SegmentedTabs<RaceTab>
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'predictions', label: 'Predictions' },
+            { value: 'info', label: 'Info' },
+          ]}
+        />
+
+        {tab === 'info' ? (
+          <RaceInfoPanel race={race} />
+        ) : (
+          <>
         <Text style={typography.sectionHeaderCompact}>Your Prediction vs Actual</Text>
-        
+
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.compLabel}>Your Bet</Text>
@@ -157,6 +177,8 @@ export default function RaceResultsScreen() {
         <TouchableOpacity style={styles.btnSecondary} onPress={() => router.push('/(tabs)/standings')}>
           <Text style={styles.btnSecondaryText}>View Global Standings</Text>
         </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </View>
   );
