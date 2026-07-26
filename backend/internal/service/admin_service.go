@@ -34,7 +34,7 @@ type AdminService struct {
 	predRepo   *repository.PredictionRepository
 	userRepo   *repository.UserRepository
 	scoringSvc *ScoringService
-	openf1     *external.OpenF1Client
+	f1         *external.F1Client
 }
 
 func NewAdminService(
@@ -52,14 +52,14 @@ func NewAdminService(
 		predRepo:   predRepo,
 		userRepo:   userRepo,
 		scoringSvc: scoringSvc,
-		openf1:     external.NewOpenF1Client(),
+		f1:         external.NewF1Client(),
 	}
 }
 
-// SyncSchedule pulls the real Grand Prix calendar for the season from OpenF1
+// SyncSchedule pulls the real Grand Prix calendar for the season from Jolpica
 // and upserts each race weekend. Returns the number of races synced.
 func (s *AdminService) SyncSchedule(ctx context.Context, season int) (int, error) {
-	races, err := s.openf1.FetchRaceWeekends(ctx, season)
+	races, err := s.f1.FetchRaceWeekends(ctx, season)
 	if err != nil {
 		return 0, fmt.Errorf("fetch schedule: %w", err)
 	}

@@ -12,27 +12,28 @@ import (
 
 const driverCacheTTL = 6 * time.Hour
 
-// DriverService serves the current F1 grid from OpenF1, cached in memory so the
-// prediction editor stays fast and resilient to OpenF1 hiccups.
+// DriverService serves the current F1 grid from the Jolpica F1 API, cached in
+// memory so the prediction editor stays fast and resilient to upstream hiccups.
 //
 // This used to be a Redis cache. The grid is one small list, identical for every
 // user and cheap to refetch, so a process-local cache does the same job without
 // a second service to host. On a scale-to-zero host the cache is lost when the
-// instance sleeps, which costs exactly one OpenF1 call on the next cold start.
+// instance sleeps, which costs exactly one upstream call on the next cold start.
 type DriverService struct {
-	openf1 *external.OpenF1Client
+	f1     *external.F1Client
+	season int
 
 	mu       sync.RWMutex
 	cached   []domain.Driver
 	cachedAt time.Time
 
 	// inflight collapses concurrent misses into a single upstream fetch, so a
-	// burst of requests after a cold start doesn't stampede OpenF1.
+	// burst of requests after a cold start doesn't stampede the upstream API.
 	inflight sync.Mutex
 }
 
-func NewDriverService() *DriverService {
-	return &DriverService{openf1: external.NewOpenF1Client()}
+func NewDriverService(season int) *DriverService {
+	return &DriverService{f1: external.NewF1Client(), season: season}
 }
 
 // read returns the cached grid and whether it is still within its TTL.
@@ -65,11 +66,11 @@ func (s *DriverService) GetDrivers(ctx context.Context) ([]domain.Driver, error)
 		return drivers, nil
 	}
 
-	drivers, err := s.openf1.FetchLatestDrivers(ctx)
+	drivers, err := s.f1.FetchLatestDrivers(ctx, s.season)
 	if err != nil {
-		// Serve stale data rather than failing the request if OpenF1 is down.
+		// Serve stale data rather than failing the request if upstream is down.
 		if stale, _ := s.read(); len(stale) > 0 {
-			log.Printf("[drivers] OpenF1 failed (%v), serving stale cache", err)
+			log.Printf("[drivers] upstream failed (%v), serving stale cache", err)
 			return stale, nil
 		}
 		return nil, err

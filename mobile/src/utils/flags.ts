@@ -29,6 +29,11 @@ const COUNTRY_TO_ISO: Record<string, string> = {
   'great britain': 'GB',
   'united states': 'US',
   usa: 'US',
+  // The schedule now comes from Jolpica (Ergast), which abbreviates some
+  // countries where OpenF1 spelled them out. Verified against the full 2026
+  // calendar: Silverstone reports "UK" and Abu Dhabi reports "UAE".
+  uk: 'GB',
+  uae: 'AE',
 };
 
 function isoToFlagEmoji(iso: string): string {

@@ -93,7 +93,7 @@ func main() {
 	predService := service.NewPredictionService(predRepo, raceRepo)
 	scoreService := service.NewScoringService(scoreRepo, resultRepo, predRepo)
 	adminService := service.NewAdminService(raceRepo, resultRepo, scoreRepo, predRepo, userRepo, scoreService)
-	driverService := service.NewDriverService()
+	driverService := service.NewDriverService(cfg.DefaultSeason)
 
 	// Init Handlers
 	authHandler := handler.NewAuthHandler(authService, cfg.EnableDevLogin)

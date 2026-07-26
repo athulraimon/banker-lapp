@@ -49,7 +49,7 @@ Metro picks the right file per platform automatically. Every screen is shared.
   supported but no longer required.
 - **Auth** — Google Sign-In only. Admin rights come from `ADMIN_EMAILS`.
 - **Data** — F1 calendar and driver grid from the public
-  [OpenF1 API](https://openf1.org). No mock/seed data.
+  [Jolpica F1 API](https://api.jolpi.ca). No mock/seed data.
 
 **Redis is gone.** Refresh tokens live in a `refresh_tokens` Postgres table
 (migration `006`), and the driver grid is cached in-process. That removed a whole
@@ -236,7 +236,7 @@ The static web app has no cold start; it is plain files on a CDN.
 
 Log in with an `ADMIN_EMAILS` account, open the **Admin** tab:
 
-1. **Sync F1 Schedule** — pulls the real Grand Prix calendar from OpenF1.
+1. **Sync F1 Schedule** — pulls the real Grand Prix calendar from Jolpica.
 2. **Set Results** — enter the official pole + P1/P2/P3. Scores recalculate.
 3. **Run Scoring** — re-run scoring for a race.
 4. **Predictions** — view and edit any user's prediction (bypasses the FP1 lock).

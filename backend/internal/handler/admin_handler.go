@@ -21,7 +21,7 @@ func NewAdminHandler(adminService *service.AdminService, defaultSeason int) *Adm
 	return &AdminHandler{adminService: adminService, defaultSeason: defaultSeason}
 }
 
-// SyncSchedule pulls the real Grand Prix calendar from OpenF1.
+// SyncSchedule pulls the real Grand Prix calendar from the Jolpica F1 API.
 func (h *AdminHandler) SyncSchedule(c echo.Context) error {
 	log.Printf("Handling %s %s", c.Request().Method, c.Request().URL.Path)
 	season := h.defaultSeason

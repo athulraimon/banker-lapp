@@ -5,7 +5,7 @@ A private Formula 1 predictions championship: predict Pole + the P1/P2/P3 podium
 - **Backend:** Go (Echo) · PostgreSQL
 - **App:** Expo / React Native — runs as an **installable PWA** (iOS, Android, desktop) and as a native Android APK, from one codebase
 - **Auth:** Google Sign-In (admin rights via an email allowlist)
-- **Data:** live F1 calendar + driver grid from the [OpenF1 API](https://openf1.org) — no mock/seed data
+- **Data:** live F1 calendar + driver grid from the [Jolpica F1 API](https://api.jolpi.ca) (the community successor to Ergast) — no mock/seed data
 - **Hosting:** Render free tier, auto-deployed on push
 
 > **Deploying, Google login setup, or installing on an iPhone?** See **[DEPLOYMENT.md](DEPLOYMENT.md)**.
@@ -15,7 +15,7 @@ A private Formula 1 predictions championship: predict Pole + the P1/P2/P3 podium
 Clean-architecture Go backend (domain → repository → service → handler) with:
 
 - **Auth** — Google ID-token verification → short-lived JWT access tokens + refresh tokens stored in Postgres. Admin status is derived from the `ADMIN_EMAILS` allowlist on every login.
-- **Schedule & drivers** — pulled live from OpenF1 (admin taps *Sync Schedule*; the driver grid is cached in-process).
+- **Schedule & drivers** — pulled live from Jolpica (admin taps *Sync Schedule*; the driver grid is cached in-process).
 - **Scoring engine** — exact-match: Pole = 5, P1 = 15, P2 = 10, P3 = 8.
 - **Admin controls** — set official results (auto-rescores), re-run scoring, and edit any user's prediction.
 - **Migrations** — embedded SQL, applied automatically on boot.
@@ -108,7 +108,7 @@ On the Android emulator use `http://10.0.2.2:9000` — the emulator cannot see `
 ### 4. Try it
 
 1. Launch the app → **Dev Mode Login Bypass** (dev builds only) signs you in as an admin.
-2. **Admin tab → Sync F1 Schedule** loads the real 2026 calendar from OpenF1.
+2. **Admin tab → Sync F1 Schedule** loads the real 2026 calendar from Jolpica.
 3. Open a race and submit a prediction; as admin, set results and watch scores + standings update.
 
 ## Scoring
