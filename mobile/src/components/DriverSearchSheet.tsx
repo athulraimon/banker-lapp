@@ -25,9 +25,10 @@ export interface DriverSearchSheetRef {
   close: () => void;
 }
 
-// Plain-Modal driver picker, styled to the vintage sheet: team-colour stripe,
-// code, name and a right-aligned status. Mirrors the admin ResultPickerModal,
-// which renders reliably where the earlier bottom-sheet did not.
+// Full-screen, top-anchored driver picker. The search field is pinned at the
+// top and the results fill the space below with flex:1, so the list stays put
+// and readable as it shortens — unlike a bottom sheet that collapses toward the
+// keyboard as results are filtered out.
 const DriverSearchSheet = forwardRef<DriverSearchSheetRef, DriverSearchSheetProps>(
   ({ onSelectDriver, selectedDrivers }, ref) => {
     const { drivers, isLoading, error } = useDrivers();
@@ -75,61 +76,66 @@ const DriverSearchSheet = forwardRef<DriverSearchSheetRef, DriverSearchSheetProp
     };
 
     return (
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={() => setVisible(false)}>
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setVisible(false)} />
+      <Modal
+        visible={visible}
+        animationType="slide"
+        onRequestClose={() => setVisible(false)}
+        statusBarTranslucent
+      >
         <KeyboardAvoidingView
-          style={styles.kav}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          pointerEvents="box-none"
+          style={styles.container}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={styles.sheet}>
-            <View style={styles.handle} />
-            <View style={styles.headerRow}>
-              <Text style={styles.title}>Pick a driver</Text>
-              <TouchableOpacity onPress={() => setVisible(false)}>
-                <Text style={styles.closeText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search driver or code — VER, HAM…"
-              placeholderTextColor={colors.textMuted}
-              value={query}
-              onChangeText={setQuery}
-              autoCapitalize="characters"
-            />
-
-            <TouchableOpacity
-              style={styles.clearRow}
-              onPress={() => {
-                onSelectDriver('');
-                setVisible(false);
-              }}
-            >
-              <Text style={styles.clearText}>Clear this position</Text>
+          <View style={styles.header}>
+            <Text style={styles.title}>Pick a driver</Text>
+            <TouchableOpacity onPress={() => setVisible(false)} hitSlop={10}>
+              <Text style={styles.closeText}>Close</Text>
             </TouchableOpacity>
-
-            {isLoading ? (
-              <View style={styles.center}>
-                <ActivityIndicator color={colors.brass} />
-                <Text style={styles.emptyText}>Loading grid…</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={filtered}
-                renderItem={renderItem}
-                keyExtractor={(item) => item.driver_id}
-                keyboardShouldPersistTaps="handled"
-                style={styles.list}
-                ListEmptyComponent={
-                  <Text style={styles.emptyText}>
-                    {error ? 'Couldn’t load drivers. Check your connection.' : `No drivers match “${query}”.`}
-                  </Text>
-                }
-              />
-            )}
           </View>
+
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search driver or code — VER, HAM…"
+            placeholderTextColor={colors.textMuted}
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            autoFocus
+            returnKeyType="search"
+          />
+
+          <TouchableOpacity
+            style={styles.clearRow}
+            onPress={() => {
+              onSelectDriver('');
+              setVisible(false);
+            }}
+          >
+            <Text style={styles.clearText}>Clear this position</Text>
+          </TouchableOpacity>
+
+          {isLoading ? (
+            <View style={styles.center}>
+              <ActivityIndicator color={colors.brass} />
+              <Text style={styles.emptyText}>Loading grid…</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filtered}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.driver_id}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>
+                  {error ? 'Couldn’t load drivers. Check your connection.' : `No drivers match “${query}”.`}
+                </Text>
+              }
+            />
+          )}
         </KeyboardAvoidingView>
       </Modal>
     );
@@ -137,22 +143,14 @@ const DriverSearchSheet = forwardRef<DriverSearchSheetRef, DriverSearchSheetProp
 );
 
 const styles = StyleSheet.create({
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(8,7,5,0.6)' },
-  kav: { flex: 1, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.bgCard,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderTopWidth: 1,
-    borderColor: colors.borderStrong,
+  container: {
+    flex: 1,
+    backgroundColor: colors.bgPhone,
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 20,
-    maxHeight: '80%',
+    paddingTop: 54,
   },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, marginBottom: 12 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title: { fontFamily: 'Jost-Bold', fontSize: 16, color: colors.textPrimary },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  title: { fontFamily: 'Jost-Bold', fontSize: 20, color: colors.textPrimary },
   closeText: {
     fontFamily: 'Jost-SemiBold',
     fontSize: 12,
@@ -167,13 +165,13 @@ const styles = StyleSheet.create({
     borderColor: colors.borderColor,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingVertical: 12,
     color: colors.textPrimary,
     fontFamily: 'Karla-Regular',
-    fontSize: 13.5,
+    fontSize: 14,
     marginBottom: 10,
   },
-  clearRow: { paddingVertical: 11, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: colors.borderColor, marginBottom: 4 },
+  clearRow: { paddingVertical: 12, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: colors.borderColor },
   clearText: {
     fontFamily: 'Jost-SemiBold',
     fontSize: 12.5,
@@ -182,21 +180,24 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: colors.textSecondary,
   },
-  list: { flexGrow: 0 },
-  center: { paddingVertical: 32, alignItems: 'center', gap: 8 },
-  emptyText: { fontFamily: 'Karla-Regular', fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingVertical: 20 },
+  // flex:1 fixes the list to the space below the search field, so filtering
+  // leaves empty space at the bottom rather than collapsing the panel.
+  list: { flex: 1 },
+  listContent: { paddingBottom: 24 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 40, gap: 8 },
+  emptyText: { fontFamily: 'Karla-Regular', fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: 24 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 11,
+    paddingVertical: 13,
     paddingHorizontal: 6,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderFaint,
   },
   stripe: { width: 4, height: 22, borderRadius: 2, flexShrink: 0 },
   code: { fontFamily: 'Jost-Bold', fontSize: 13, width: 42, color: colors.textPrimary },
-  name: { fontFamily: 'Karla-Regular', fontSize: 13.5, color: colors.textPrimary, flex: 1 },
+  name: { fontFamily: 'Karla-Regular', fontSize: 14, color: colors.textPrimary, flex: 1 },
   right: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.textMuted },
 });
 
