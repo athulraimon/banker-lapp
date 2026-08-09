@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl, Animated } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { colors } from '../../src/theme/colors';
 import { standingsApi, Standing, DriverStanding } from '../../src/api/standings';
@@ -22,6 +22,7 @@ export default function StandingsScreen() {
   const [driversLoaded, setDriversLoaded] = useState(false);
   const [view, setView] = useState<View2>('players');
   const { user } = useAuthStore();
+  const progress = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(() => {
     setRefreshing(true);
@@ -165,6 +166,7 @@ export default function StandingsScreen() {
         <SegmentedTabs<View2>
           value={view}
           onChange={setView}
+          progress={progress}
           options={[
             { value: 'players', label: 'Players' },
             { value: 'drivers', label: 'F1 Drivers' },
@@ -172,7 +174,7 @@ export default function StandingsScreen() {
         />
       </View>
 
-      <SwipeViews index={view === 'players' ? 0 : 1} onIndexChange={(i) => setView(i === 0 ? 'players' : 'drivers')}>
+      <SwipeViews index={view === 'players' ? 0 : 1} onIndexChange={(i) => setView(i === 0 ? 'players' : 'drivers')} progress={progress}>
         {playersPage}
         {driversPage}
       </SwipeViews>

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../src/theme/colors';
@@ -22,6 +22,7 @@ export default function RaceResultsScreen() {
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResultWithPredictions | null>(null);
   const [tab, setTab] = useState<RaceTab>('predictions');
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (id) {
@@ -109,6 +110,7 @@ export default function RaceResultsScreen() {
         <SegmentedTabs<RaceTab>
           value={tab}
           onChange={setTab}
+          progress={progress}
           options={[
             { value: 'predictions', label: 'Predictions' },
             { value: 'info', label: 'Circuit & sessions' },
@@ -119,6 +121,7 @@ export default function RaceResultsScreen() {
       <SwipeViews
         index={tab === 'predictions' ? 0 : 1}
         onIndexChange={(i) => setTab(i === 0 ? 'predictions' : 'info')}
+        progress={progress}
       >
         {/* Breakdown */}
         <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>

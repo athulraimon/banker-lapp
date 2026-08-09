@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { showAlert } from '../../src/components/AppDialog';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -33,6 +33,7 @@ export default function PredictionEditorScreen() {
   const [tab, setTab] = useState<RaceTab>('predictions');
   const [activeSlot, setActiveSlot] = useState<Slot | null>(null);
   const [saved, setSaved] = useState(false);
+  const progress = useRef(new Animated.Value(0)).current;
 
   const bottomSheetRef = useRef<DriverSearchSheetRef>(null);
 
@@ -142,6 +143,7 @@ export default function PredictionEditorScreen() {
           <SegmentedTabs<RaceTab>
             value={tab}
             onChange={setTab}
+            progress={progress}
             options={[
               { value: 'predictions', label: 'Predictions' },
               { value: 'info', label: 'Circuit & sessions' },
@@ -152,6 +154,7 @@ export default function PredictionEditorScreen() {
         <SwipeViews
           index={tab === 'predictions' ? 0 : 1}
           onIndexChange={(i) => setTab(i === 0 ? 'predictions' : 'info')}
+          progress={progress}
         >
           <ScrollView
             contentContainerStyle={styles.pageInner}

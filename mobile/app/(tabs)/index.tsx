@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Animated } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
@@ -10,6 +10,7 @@ import FadeInView from '../../src/components/anim/FadeInView';
 import PressableScale from '../../src/components/anim/PressableScale';
 import CheckerStripe from '../../src/components/CheckerStripe';
 import SwipeViews from '../../src/components/SwipeViews';
+import SegmentedTabs from '../../src/components/SegmentedTabs';
 import { Skeleton } from '../../src/components/Skeleton';
 import { staggerDelay } from '../../src/theme/motion';
 import { randomRadioLine } from '../../src/data/radioLines';
@@ -24,6 +25,7 @@ export default function DashboardScreen() {
   const [tab, setTab] = useState<'upcoming' | 'completed'>('upcoming');
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
+  const progress = useRef(new Animated.Value(0)).current;
   // An iconic F1 line as the greeting, re-rolled every time the dashboard opens.
   const [radioLine, setRadioLine] = useState(randomRadioLine);
 
@@ -234,22 +236,23 @@ export default function DashboardScreen() {
           )}
 
           {/* Calendar header + swipeable Upcoming / Done lists */}
-          <View style={styles.calHead}>
-            <Text style={styles.calHeadLabel}>Calendar</Text>
-            <View style={styles.calRule} />
-            <View style={styles.pillRow}>
-              <TouchableOpacity onPress={() => setTab('upcoming')} style={[styles.pill, tab === 'upcoming' && styles.pillActive]}>
-                <Text style={[styles.pillText, tab === 'upcoming' && styles.pillTextActive]}>Upcoming {upcomingRaces.length}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setTab('completed')} style={[styles.pill, tab === 'completed' && styles.pillActive]}>
-                <Text style={[styles.pillText, tab === 'completed' && styles.pillTextActive]}>Done {completedRaces.length}</Text>
-              </TouchableOpacity>
-            </View>
+          <Text style={styles.calSectionLabel}>Calendar</Text>
+          <View style={{ paddingHorizontal: 18 }}>
+            <SegmentedTabs<'upcoming' | 'completed'>
+              value={tab}
+              onChange={setTab}
+              progress={progress}
+              options={[
+                { value: 'upcoming', label: `Upcoming ${upcomingRaces.length}` },
+                { value: 'completed', label: `Done ${completedRaces.length}` },
+              ]}
+            />
           </View>
 
           <SwipeViews
             index={tab === 'upcoming' ? 0 : 1}
             onIndexChange={(i) => setTab(i === 0 ? 'upcoming' : 'completed')}
+            progress={progress}
           >
             {raceList(upcomingRaces, 'No upcoming races.')}
             {raceList(completedRaces, 'No completed races yet.')}
@@ -370,6 +373,16 @@ const styles = StyleSheet.create({
   badgeOpen: { backgroundColor: 'rgba(47,107,79,0.18)', color: colors.accentGreen, borderWidth: 1, borderColor: 'rgba(47,107,79,0.5)' },
   badgeLocked: { backgroundColor: 'rgba(168,41,28,0.15)', color: colors.redText, borderWidth: 1, borderColor: 'rgba(168,41,28,0.5)' },
 
+  calSectionLabel: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2.4,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+    paddingHorizontal: 18,
+    marginBottom: 8,
+  },
   calHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8, paddingHorizontal: 18 },
   calHeadLabel: {
     fontFamily: 'Jost-SemiBold',

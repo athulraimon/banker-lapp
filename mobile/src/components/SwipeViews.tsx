@@ -1,25 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { View, ScrollView, Animated, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
 interface Props {
   index: number;
   onIndexChange: (index: number) => void;
   children: React.ReactNode; // one node per page
+  // Optional shared value updated live during a swipe with the page progress
+  // (0 … pages-1), so a tab control can slide its indicator in step. Normalised
+  // here against the measured page width, so callers never need to know it.
+  progress?: Animated.Value;
 }
 
 // Horizontal paged container that lets the user swipe between sibling pages and
-// stays in sync with an external tab control. Built on a paging ScrollView so it
-// works on both native and web with no extra native dependency. The pages are
-// already-scrollable content (a vertical ScrollView or FlatList) — a horizontal
-// outer + vertical inner is a different orientation, so there is no nested
-// virtualization warning.
-export default function SwipeViews({ index, onIndexChange, children }: Props) {
+// stays in sync with an external tab control. A plain paging ScrollView so it
+// works on native and web with no extra native dependency.
+export default function SwipeViews({ index, onIndexChange, children, progress }: Props) {
   const ref = useRef<ScrollView>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const pages = React.Children.toArray(children);
 
-  // Latest controlled index, read inside the debounced settle callback without
-  // making it a dependency.
   const indexRef = useRef(index);
   indexRef.current = index;
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,18 +30,18 @@ export default function SwipeViews({ index, onIndexChange, children }: Props) {
 
   useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
 
-  // Report the page a scroll settled on. Clamped to a valid page index.
-  const settle = (x: number) => {
+  const settle = (offsetX: number) => {
     if (!size.w) return;
-    const i = Math.max(0, Math.min(pages.length - 1, Math.round(x / size.w)));
+    const i = Math.max(0, Math.min(pages.length - 1, Math.round(offsetX / size.w)));
     if (i !== indexRef.current) onIndexChange(i);
   };
 
-  // onMomentumScrollEnd is the clean native signal, but react-native-web never
-  // fires it — so also debounce onScroll, which fires on both platforms, and
-  // settle once the swipe stops.
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const x = e.nativeEvent.contentOffset.x;
+    // Live progress for the moving indicator (normalised to page units).
+    if (progress && size.w > 0) progress.setValue(x / size.w);
+    // Debounced settle picks the landed page — the source of truth for the tab.
+    // (onMomentumScrollEnd never fires on web, so this is what works there.)
     if (settleTimer.current) clearTimeout(settleTimer.current);
     settleTimer.current = setTimeout(() => settle(x), 120);
   };
