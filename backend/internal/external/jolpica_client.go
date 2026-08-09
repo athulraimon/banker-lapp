@@ -90,6 +90,9 @@ type ergastStandingsResponse struct {
 		StandingsTable struct {
 			StandingsLists []struct {
 				DriverStandings []struct {
+					Position     string              `json:"position"`
+					Points       string              `json:"points"`
+					Wins         string              `json:"wins"`
 					Driver       ergastDriver        `json:"Driver"`
 					Constructors []ergastConstructor `json:"Constructors"`
 				} `json:"DriverStandings"`
@@ -227,6 +230,44 @@ func (c *F1Client) FetchLatestDrivers(ctx context.Context, season int) ([]domain
 	// Before the first race of a season the standings are empty, so fall back
 	// to the entry list. Teams are unknown there and are left blank.
 	return c.driversFromEntryList(ctx, season)
+}
+
+// FetchDriverStandings returns the official Drivers' Championship table for the
+// season, ordered by position. Empty before the season's first race.
+func (c *F1Client) FetchDriverStandings(ctx context.Context, season int) ([]domain.DriverStanding, error) {
+	var out ergastStandingsResponse
+	url := fmt.Sprintf("%s/%d/driverstandings/?format=json&limit=100", c.baseURL, season)
+	if err := c.getJSON(ctx, url, &out); err != nil {
+		return nil, err
+	}
+	lists := out.MRData.StandingsTable.StandingsLists
+	if len(lists) == 0 {
+		return []domain.DriverStanding{}, nil
+	}
+
+	atoi := func(s string) int { n, _ := strconv.Atoi(s); return n }
+	// Points can be fractional (half points); round to the nearest whole point.
+	pts := func(s string) int { f, _ := strconv.ParseFloat(s, 64); return int(f + 0.5) }
+
+	rows := lists[0].DriverStandings
+	standings := make([]domain.DriverStanding, 0, len(rows))
+	for _, s := range rows {
+		team, colour := "", ""
+		if len(s.Constructors) > 0 {
+			team = s.Constructors[0].Name
+			colour = teamColors[s.Constructors[0].ConstructorID]
+		}
+		standings = append(standings, domain.DriverStanding{
+			Position:      atoi(s.Position),
+			Points:        pts(s.Points),
+			Wins:          atoi(s.Wins),
+			DriverID:      driverCode(s.Driver),
+			BroadcastName: s.Driver.GivenName + " " + s.Driver.FamilyName,
+			TeamName:      team,
+			TeamColor:     colour,
+		})
+	}
+	return standings, nil
 }
 
 func (c *F1Client) driversFromStandings(ctx context.Context, season int) ([]domain.Driver, error) {

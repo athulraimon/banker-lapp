@@ -10,6 +10,7 @@ import { predictionsApi, Prediction } from '../../src/api/predictions';
 import DriverSearchSheet, { DriverSearchSheetRef } from '../../src/components/DriverSearchSheet';
 import LoadingScreen from '../../src/components/LoadingScreen';
 import SegmentedTabs from '../../src/components/SegmentedTabs';
+import SwipeViews from '../../src/components/SwipeViews';
 import RaceInfoPanel from '../../src/components/RaceInfoPanel';
 import FadeInView from '../../src/components/anim/FadeInView';
 import { useDrivers } from '../../src/hooks/useDrivers';
@@ -54,10 +55,12 @@ export default function PredictionEditorScreen() {
   const podiumCodes = [prediction.p1_driver_id, prediction.p2_driver_id, prediction.p3_driver_id].filter(Boolean);
   const dupe = new Set(podiumCodes).size !== podiumCodes.length;
   const filledCount = ([prediction.pole_driver_id, prediction.p1_driver_id, prediction.p2_driver_id, prediction.p3_driver_id]).filter(Boolean).length;
-  const complete = filledCount === 4 && !dupe;
+  // Partial picks are allowed — the backend accepts any subset as long as the
+  // podium has no duplicates. Only block on a duplicate or an empty slate.
+  const canSave = filledCount >= 1 && !dupe;
 
   const handleSave = async () => {
-    if (!complete) return;
+    if (!canSave) return;
     try {
       await predictionsApi.submitPrediction(prediction);
       setSaved(true);
@@ -110,7 +113,11 @@ export default function PredictionEditorScreen() {
   const ms = Math.max(0, fp1 - Date.now());
   const closesIn = `${Math.floor(ms / 86400000)}d ${Math.floor((ms / 3600000) % 24)}h`;
 
-  const saveLabel = saved ? 'Picks saved ✓' : complete ? 'Save picks' : dupe ? 'Fix duplicate picks' : 'Choose all four to save';
+  const saveLabel = saved
+    ? 'Picks saved ✓'
+    : dupe ? 'Fix duplicate picks'
+    : filledCount === 0 ? 'Pick at least one driver'
+    : 'Save picks';
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -131,12 +138,7 @@ export default function PredictionEditorScreen() {
           </Text>
         </View>
 
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.contentInner}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.tabsWrap}>
           <SegmentedTabs<RaceTab>
             value={tab}
             onChange={setTab}
@@ -145,8 +147,17 @@ export default function PredictionEditorScreen() {
               { value: 'info', label: 'Circuit & sessions' },
             ]}
           />
+        </View>
 
-          {tab === 'predictions' ? (
+        <SwipeViews
+          index={tab === 'predictions' ? 0 : 1}
+          onIndexChange={(i) => setTab(i === 0 ? 'predictions' : 'info')}
+        >
+          <ScrollView
+            contentContainerStyle={styles.pageInner}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <FadeInView>
               <Text style={styles.eyebrow}>Qualifying · 5 pts</Text>
               {renderSlot('pole', 'POLE', true)}
@@ -163,13 +174,15 @@ export default function PredictionEditorScreen() {
               )}
 
               <Text style={styles.note}>
-                Only exact matches score. Your pole pick can also be your P1. Edit as often as you like until Practice 1.
+                Save any time — you don't need all four. Your pole pick can also be your P1. Edit as often as you like until Practice 1.
               </Text>
             </FadeInView>
-          ) : (
+          </ScrollView>
+
+          <ScrollView contentContainerStyle={styles.pageInner} showsVerticalScrollIndicator={false}>
             <RaceInfoPanel race={race} />
-          )}
-        </ScrollView>
+          </ScrollView>
+        </SwipeViews>
 
         {/* Pinned save bar (predictions tab, editable races only) */}
         {tab === 'predictions' && !locked && (
@@ -177,13 +190,13 @@ export default function PredictionEditorScreen() {
             <TouchableOpacity
               style={[
                 styles.saveBar,
-                { backgroundColor: saved ? colors.racingGreen : complete ? colors.oxblood : colors.heroTop },
+                { backgroundColor: saved ? colors.racingGreen : canSave ? colors.oxblood : colors.heroTop },
               ]}
               onPress={handleSave}
-              disabled={!complete}
+              disabled={!canSave}
               activeOpacity={0.85}
             >
-              <Text style={[styles.saveBarText, { color: saved || complete ? colors.oxbloodFg : colors.textMuted }]}>
+              <Text style={[styles.saveBarText, { color: saved || canSave ? colors.oxbloodFg : colors.textMuted }]}>
                 {saveLabel}
               </Text>
             </TouchableOpacity>
@@ -241,8 +254,8 @@ const styles = StyleSheet.create({
   badgeOpen: { backgroundColor: 'rgba(47,107,79,0.18)', color: colors.accentGreen, borderWidth: 1, borderColor: 'rgba(47,107,79,0.5)' },
   badgeLocked: { backgroundColor: 'rgba(168,41,28,0.15)', color: colors.redText, borderWidth: 1, borderColor: 'rgba(168,41,28,0.5)' },
 
-  content: { flex: 1 },
-  contentInner: { padding: 16, paddingBottom: 120 },
+  tabsWrap: { paddingHorizontal: 16, paddingTop: 14 },
+  pageInner: { paddingHorizontal: 16, paddingBottom: 120 },
   eyebrow: {
     fontFamily: 'Jost-SemiBold',
     fontSize: 11,

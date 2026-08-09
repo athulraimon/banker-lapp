@@ -98,3 +98,16 @@ type Driver struct {
 	TeamName      string `json:"team_name"`
 	TeamColor     string `json:"team_color"`
 }
+
+// DriverStanding is one row of the official F1 World Drivers' Championship,
+// sourced from Jolpica. Separate from Driver because it carries the live
+// position/points/wins the app shows on the standings screen.
+type DriverStanding struct {
+	Position      int    `json:"position"`
+	Points        int    `json:"points"`
+	Wins          int    `json:"wins"`
+	DriverID      string `json:"driver_id"` // three-letter code, e.g. VER
+	BroadcastName string `json:"broadcast_name"`
+	TeamName      string `json:"team_name"`
+	TeamColor     string `json:"team_color"`
+}

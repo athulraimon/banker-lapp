@@ -8,9 +8,14 @@ import (
 
 	"banker_lapp_backend/internal/domain"
 	"banker_lapp_backend/internal/external"
+	"banker_lapp_backend/internal/repository"
 )
 
 const driverCacheTTL = 6 * time.Hour
+
+// Standings change only when a race is scored, so a short TTL keeps them fresh
+// without hammering the upstream API.
+const driverStandingsTTL = 15 * time.Minute
 
 // DriverService serves the current F1 grid from the Jolpica F1 API, cached in
 // memory so the prediction editor stays fast and resilient to upstream hiccups.
@@ -20,8 +25,9 @@ const driverCacheTTL = 6 * time.Hour
 // a second service to host. On a scale-to-zero host the cache is lost when the
 // instance sleeps, which costs exactly one upstream call on the next cold start.
 type DriverService struct {
-	f1     *external.F1Client
-	season int
+	f1            *external.F1Client
+	season        int
+	standingsRepo *repository.DriverStandingsRepository
 
 	mu       sync.RWMutex
 	cached   []domain.Driver
@@ -32,8 +38,8 @@ type DriverService struct {
 	inflight sync.Mutex
 }
 
-func NewDriverService(season int) *DriverService {
-	return &DriverService{f1: external.NewF1Client(), season: season}
+func NewDriverService(season int, standingsRepo *repository.DriverStandingsRepository) *DriverService {
+	return &DriverService{f1: external.NewF1Client(), season: season, standingsRepo: standingsRepo}
 }
 
 // read returns the cached grid and whether it is still within its TTL.
@@ -78,4 +84,40 @@ func (s *DriverService) GetDrivers(ctx context.Context) ([]domain.Driver, error)
 
 	s.write(drivers)
 	return drivers, nil
+}
+
+// GetDriverStandings returns the official F1 Drivers' Championship table. The
+// persisted copy in Postgres is the cache: it is served while fresh, refreshed
+// from the upstream API when stale, and served stale if the upstream is down —
+// so the table survives a cold start and outages alike.
+func (s *DriverService) GetDriverStandings(ctx context.Context) ([]domain.DriverStanding, error) {
+	if stored, updatedAt, err := s.standingsRepo.Get(ctx, s.season); err == nil &&
+		len(stored) > 0 && time.Since(updatedAt) < driverStandingsTTL {
+		return stored, nil
+	}
+
+	s.inflight.Lock()
+	defer s.inflight.Unlock()
+
+	// Re-check after acquiring the lock — another request may have refreshed.
+	stored, updatedAt, _ := s.standingsRepo.Get(ctx, s.season)
+	if len(stored) > 0 && time.Since(updatedAt) < driverStandingsTTL {
+		return stored, nil
+	}
+
+	fresh, err := s.f1.FetchDriverStandings(ctx, s.season)
+	if err != nil {
+		if len(stored) > 0 {
+			log.Printf("[driver-standings] upstream failed (%v), serving persisted copy", err)
+			return stored, nil
+		}
+		return nil, err
+	}
+
+	if len(fresh) > 0 {
+		if err := s.standingsRepo.Replace(ctx, s.season, fresh); err != nil {
+			log.Printf("[driver-standings] persist failed: %v", err)
+		}
+	}
+	return fresh, nil
 }

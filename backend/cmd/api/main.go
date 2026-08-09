@@ -86,6 +86,7 @@ func main() {
 	scoreRepo := repository.NewScoreRepository(dbPool)
 	resultRepo := repository.NewResultRepository(dbPool)
 	refreshRepo := repository.NewRefreshTokenRepository(dbPool)
+	driverStandingsRepo := repository.NewDriverStandingsRepository(dbPool)
 
 	// Init Services
 	authService := service.NewAuthService(userRepo, refreshRepo, cfg)
@@ -93,7 +94,7 @@ func main() {
 	predService := service.NewPredictionService(predRepo, raceRepo)
 	scoreService := service.NewScoringService(scoreRepo, resultRepo, predRepo)
 	adminService := service.NewAdminService(raceRepo, resultRepo, scoreRepo, predRepo, userRepo, scoreService)
-	driverService := service.NewDriverService(cfg.DefaultSeason)
+	driverService := service.NewDriverService(cfg.DefaultSeason, driverStandingsRepo)
 
 	// Init Handlers
 	authHandler := handler.NewAuthHandler(authService, cfg.EnableDevLogin)

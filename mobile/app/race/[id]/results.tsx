@@ -7,8 +7,13 @@ import { racesApi, Race, RaceResultWithPredictions } from '../../../src/api/race
 import { predictionsApi, Prediction } from '../../../src/api/predictions';
 import LoadingScreen from '../../../src/components/LoadingScreen';
 import CheckerStripe from '../../../src/components/CheckerStripe';
+import SegmentedTabs from '../../../src/components/SegmentedTabs';
+import SwipeViews from '../../../src/components/SwipeViews';
+import RaceInfoPanel from '../../../src/components/RaceInfoPanel';
 import FadeInView from '../../../src/components/anim/FadeInView';
 import { staggerDelay } from '../../../src/theme/motion';
+
+type RaceTab = 'predictions' | 'info';
 
 export default function RaceResultsScreen() {
   const { id } = useLocalSearchParams();
@@ -16,6 +21,7 @@ export default function RaceResultsScreen() {
   const [race, setRace] = useState<Race | null>(null);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResultWithPredictions | null>(null);
+  const [tab, setTab] = useState<RaceTab>('predictions');
 
   useEffect(() => {
     if (id) {
@@ -99,51 +105,70 @@ export default function RaceResultsScreen() {
         </Text>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>
-        {/* Summary */}
-        <FadeInView>
-          <View style={styles.summary}>
-            <CheckerStripe colorA={colors.cream} colorB={colors.heroBottom} />
-            <View style={styles.summaryBody}>
-              <Text style={styles.summaryEyebrow}>{race.season} Season</Text>
-              <Text style={styles.summaryName}>{race.grand_prix}</Text>
-              <Text style={styles.summaryPoints}>+{userScore?.points || 0}</Text>
-              <Text style={styles.summaryCaption}>Points earned · {correctCount} of 4 correct</Text>
+      <View style={styles.tabsWrap}>
+        <SegmentedTabs<RaceTab>
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'predictions', label: 'Predictions' },
+            { value: 'info', label: 'Circuit & sessions' },
+          ]}
+        />
+      </View>
+
+      <SwipeViews
+        index={tab === 'predictions' ? 0 : 1}
+        onIndexChange={(i) => setTab(i === 0 ? 'predictions' : 'info')}
+      >
+        {/* Breakdown */}
+        <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>
+          <FadeInView>
+            <View style={styles.summary}>
+              <CheckerStripe colorA={colors.cream} colorB={colors.heroBottom} />
+              <View style={styles.summaryBody}>
+                <Text style={styles.summaryEyebrow}>{race.season} Season</Text>
+                <Text style={styles.summaryName}>{race.grand_prix}</Text>
+                <Text style={styles.summaryPoints}>+{userScore?.points || 0}</Text>
+                <Text style={styles.summaryCaption}>Points earned · {correctCount} of 4 correct</Text>
+              </View>
             </View>
-          </View>
-        </FadeInView>
+          </FadeInView>
 
-        {/* Comparison */}
-        <Text style={styles.eyebrow}>Your picks vs the result</Text>
-        {slots.map(s => compareRow(s.label, predVal(s.key), actualVal(s.key)))}
+          <Text style={styles.eyebrow}>Your picks vs the result</Text>
+          {slots.map(s => compareRow(s.label, predVal(s.key), actualVal(s.key)))}
 
-        {/* Competitors */}
-        <Text style={[styles.eyebrow, { marginTop: 22, marginBottom: 4 }]}>How everyone scored</Text>
-        <Text style={styles.picksHint}><Text style={{ color: colors.accentGreen }}>Green</Text> picks matched the official result.</Text>
-        {raceResults?.race_scores?.length ? (
-          raceResults.race_scores.map((score, index) => {
-            const isYou = score.user_id === prediction?.user_id;
-            return (
-              <FadeInView key={score.user_id} delay={staggerDelay(index)} offsetY={8}>
-                <View style={[styles.compRow, isYou && styles.compRowYou]}>
-                  <Text style={styles.compRank}>{String(index + 1).padStart(2, '0')}</Text>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.compName} numberOfLines={1}>{score.user_name}{isYou ? ' (You)' : ''}</Text>
-                    {renderCompetitorPicks(score.user_id)}
+          <Text style={[styles.eyebrow, { marginTop: 22, marginBottom: 4 }]}>How everyone scored</Text>
+          <Text style={styles.picksHint}><Text style={{ color: colors.accentGreen }}>Green</Text> picks matched the official result.</Text>
+          {raceResults?.race_scores?.length ? (
+            raceResults.race_scores.map((score, index) => {
+              const isYou = score.user_id === prediction?.user_id;
+              return (
+                <FadeInView key={score.user_id} delay={staggerDelay(index)} offsetY={8}>
+                  <View style={[styles.compRow, isYou && styles.compRowYou]}>
+                    <Text style={styles.compRank}>{String(index + 1).padStart(2, '0')}</Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.compName} numberOfLines={1}>{score.user_name}{isYou ? ' (You)' : ''}</Text>
+                      {renderCompetitorPicks(score.user_id)}
+                    </View>
+                    <Text style={styles.compPts}>{score.points}</Text>
                   </View>
-                  <Text style={styles.compPts}>{score.points}</Text>
-                </View>
-              </FadeInView>
-            );
-          })
-        ) : (
-          <Text style={styles.note}>No scores yet — results haven’t been entered for this race.</Text>
-        )}
+                </FadeInView>
+              );
+            })
+          ) : (
+            <Text style={styles.note}>No scores yet — results haven’t been entered for this race.</Text>
+          )}
 
-        <TouchableOpacity style={styles.viewBtn} onPress={() => router.push('/(tabs)/standings')} activeOpacity={0.85}>
-          <Text style={styles.viewBtnText}>View championship</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity style={styles.viewBtn} onPress={() => router.push('/(tabs)/standings')} activeOpacity={0.85}>
+            <Text style={styles.viewBtnText}>View championship</Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* Circuit & sessions */}
+        <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>
+          <RaceInfoPanel race={race} />
+        </ScrollView>
+      </SwipeViews>
     </View>
   );
 }
@@ -183,6 +208,7 @@ const styles = StyleSheet.create({
   },
   badgeProvisional: { backgroundColor: 'rgba(201,162,39,0.15)', color: colors.brass, borderColor: 'rgba(201,162,39,0.4)' },
 
+  tabsWrap: { paddingHorizontal: 16, paddingTop: 14 },
   inner: { padding: 16, paddingBottom: 40 },
 
   summary: {
