@@ -1,0 +1,8 @@
+/* Paints the page background before React mounts so the web app never flashes
+   white on launch. `+html.tsx` only covers the exported build; this global
+   stylesheet is injected by Metro in dev too. Ignored on native. */
+html,
+body,
+#root {
+  background-color: #0d0c09;
+}

@@ -101,10 +101,12 @@ export default function DashboardScreen() {
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
-  const statusFor = (r: Race): { label: string; color: string } => {
-    if (isWeekendOver(r)) return { label: 'Finished', color: colors.textSecondary };
-    if (Date.now() < new Date(r.fp1_time).getTime()) return { label: 'Opens', color: colors.accentGreen };
-    return { label: 'Locked', color: colors.redText };
+  // Predictions close (lock) when Practice 1 starts, so an upcoming race shows
+  // "Closes" against its FP1 date rather than its race day.
+  const statusFor = (r: Race): { label: string; color: string; date: string } => {
+    if (isWeekendOver(r)) return { label: 'Finished', color: colors.textSecondary, date: r.race_time };
+    if (Date.now() < new Date(r.fp1_time).getTime()) return { label: 'Closes', color: colors.accentGreen, date: r.fp1_time };
+    return { label: 'Locked', color: colors.redText, date: r.race_time };
   };
 
   const openRace = (r: Race) => {
@@ -126,7 +128,7 @@ export default function DashboardScreen() {
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={[styles.calStatus, { color: st.color }]}>{st.label}</Text>
-            <Text style={styles.calDate}>{fmtDate(item.race_time)}</Text>
+            <Text style={styles.calDate}>{fmtDate(st.date)}</Text>
           </View>
         </PressableScale>
       </FadeInView>

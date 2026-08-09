@@ -64,10 +64,26 @@ export default function RaceResultsScreen() {
     );
   };
 
-  const competitorPicks = (userId: string) => {
+  // Render a competitor's four picks, colouring the ones that matched the
+  // official result in brass-green so it's clear at a glance who called what.
+  const renderCompetitorPicks = (userId: string) => {
     const p = raceResults?.predictions.find(x => x.user_id === userId);
-    if (!p) return '—';
-    return [p.pole_driver_id, p.p1_driver_id, p.p2_driver_id, p.p3_driver_id].map(v => v || '–').join(' · ');
+    if (!p) return <Text style={styles.compPicks}>—</Text>;
+    const keys = ['pole', 'p1', 'p2', 'p3'] as const;
+    return (
+      <Text style={styles.compPicks} numberOfLines={1}>
+        {keys.map((k, i) => {
+          const code = ((p as unknown as Record<string, string>)[`${k}_driver_id`]) || '–';
+          const hit = code !== '–' && code === actualVal(k);
+          return (
+            <Text key={k}>
+              <Text style={hit ? styles.pickHit : styles.pickMiss}>{code}</Text>
+              {i < keys.length - 1 ? <Text style={styles.pickSep}>{'  ·  '}</Text> : null}
+            </Text>
+          );
+        })}
+      </Text>
+    );
   };
 
   return (
@@ -102,7 +118,8 @@ export default function RaceResultsScreen() {
         {slots.map(s => compareRow(s.label, predVal(s.key), actualVal(s.key)))}
 
         {/* Competitors */}
-        <Text style={[styles.eyebrow, { marginTop: 22 }]}>How everyone scored</Text>
+        <Text style={[styles.eyebrow, { marginTop: 22, marginBottom: 4 }]}>How everyone scored</Text>
+        <Text style={styles.picksHint}><Text style={{ color: colors.accentGreen }}>Green</Text> picks matched the official result.</Text>
         {raceResults?.race_scores?.length ? (
           raceResults.race_scores.map((score, index) => {
             const isYou = score.user_id === prediction?.user_id;
@@ -112,7 +129,7 @@ export default function RaceResultsScreen() {
                   <Text style={styles.compRank}>{String(index + 1).padStart(2, '0')}</Text>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.compName} numberOfLines={1}>{score.user_name}{isYou ? ' (You)' : ''}</Text>
-                    <Text style={styles.compPicks} numberOfLines={1}>{competitorPicks(score.user_id)}</Text>
+                    {renderCompetitorPicks(score.user_id)}
                   </View>
                   <Text style={styles.compPts}>{score.points}</Text>
                 </View>
@@ -240,6 +257,10 @@ const styles = StyleSheet.create({
   compRank: { fontFamily: 'Jost-Bold', fontSize: 13, color: colors.textSecondary, width: 20 },
   compName: { fontFamily: 'Jost-SemiBold', fontSize: 14, color: colors.textPrimary },
   compPicks: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.textSecondary, marginTop: 2 },
+  pickHit: { fontFamily: 'Jost-SemiBold', fontSize: 11.5, color: colors.accentGreen },
+  pickMiss: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.textSecondary },
+  pickSep: { color: colors.textMuted },
+  picksHint: { fontFamily: 'Karla-Regular', fontSize: 11, color: colors.textMuted, marginBottom: 10 },
   compPts: { fontFamily: 'Jost-Bold', fontSize: 18, color: colors.brass, fontVariant: ['tabular-nums'] },
 
   note: { fontFamily: 'Karla-Regular', fontSize: 12.5, color: colors.textMuted, marginTop: 4 },
