@@ -12,6 +12,7 @@ import PressableScale from '../../src/components/anim/PressableScale';
 import CheckerStripe from '../../src/components/CheckerStripe';
 import { Skeleton } from '../../src/components/Skeleton';
 import { staggerDelay } from '../../src/theme/motion';
+import { randomRadioLine } from '../../src/data/radioLines';
 
 const pad = (n: number) => String(Math.max(0, Math.floor(n))).padStart(2, '0');
 
@@ -24,6 +25,12 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   // Ticks once a second so the hero countdown stays live.
   const [now, setNow] = useState(Date.now());
+  // An iconic F1 line as the greeting, re-rolled every time the dashboard is
+  // opened (see the focus effect below) rather than once per mount.
+  const [radioLine, setRadioLine] = useState(randomRadioLine);
+
+  // Fresh line each time the screen comes into focus.
+  useFocusEffect(useCallback(() => { setRadioLine(randomRadioLine()); }, []));
 
   // Refetch races whenever the tab gains focus so status changes (e.g. an admin
   // setting results) show up without restarting the app.
@@ -142,8 +149,8 @@ export default function DashboardScreen() {
       {/* Header */}
       <View style={styles.topBar}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>Season 2026</Text>
-          <Text style={styles.greeting}>Good luck, {user?.display_name || 'Driver'}</Text>
+          <Text style={styles.eyebrow} numberOfLines={1}>Season 2026 · {user?.display_name || 'Driver'}</Text>
+          <Text style={styles.greeting}>{radioLine}</Text>
         </View>
         <TouchableOpacity style={styles.logoutBtn} onPress={logout} hitSlop={8}>
           <Ionicons name="log-out-outline" size={17} color={colors.textSecondary} />
@@ -289,10 +296,12 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontFamily: 'Jost-Bold',
-    fontSize: 26,
+    fontSize: 22,
+    lineHeight: 26,
     letterSpacing: -0.3,
     color: colors.textPrimary,
-    marginTop: 2,
+    marginTop: 3,
+    paddingRight: 8,
   },
   logoutBtn: {
     width: 34,
