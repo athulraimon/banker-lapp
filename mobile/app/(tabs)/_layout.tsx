@@ -11,11 +11,12 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: 'rgba(20, 22, 29, 0.95)',
+          backgroundColor: 'rgba(23, 21, 18, 0.96)',
           borderTopColor: colors.borderColor,
         },
-        tabBarActiveTintColor: colors.f1Red,
+        tabBarActiveTintColor: colors.brass,
         tabBarInactiveTintColor: colors.textMuted,
+        tabBarLabelStyle: { fontFamily: 'Jost-SemiBold', letterSpacing: 0.5 },
         sceneStyle: { backgroundColor: colors.bgCarbon },
       }}
     >

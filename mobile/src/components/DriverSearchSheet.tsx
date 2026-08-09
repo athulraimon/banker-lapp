@@ -12,7 +12,6 @@ import {
   Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
 import { useDrivers } from '../hooks/useDrivers';
 import { Driver } from '../api/drivers';
 
@@ -21,16 +20,14 @@ interface DriverSearchSheetProps {
   selectedDrivers: string[];
 }
 
-// Imperative API kept compatible with the previous bottom-sheet version so the
-// prediction editor can keep calling ref.expand() / ref.close().
 export interface DriverSearchSheetRef {
   expand: () => void;
   close: () => void;
 }
 
-// Plain-Modal driver picker. Mirrors the admin ResultPickerModal, which renders
-// reliably — the earlier @gorhom/bottom-sheet version would not expand on some
-// devices, leaving the list invisible.
+// Plain-Modal driver picker, styled to the vintage sheet: team-colour stripe,
+// code, name and a right-aligned status. Mirrors the admin ResultPickerModal,
+// which renders reliably where the earlier bottom-sheet did not.
 const DriverSearchSheet = forwardRef<DriverSearchSheetRef, DriverSearchSheetProps>(
   ({ onSelectDriver, selectedDrivers }, ref) => {
     const { drivers, isLoading, error } = useDrivers();
@@ -60,20 +57,18 @@ const DriverSearchSheet = forwardRef<DriverSearchSheetRef, DriverSearchSheetProp
       const isSelected = selectedDrivers.includes(item.driver_id);
       return (
         <TouchableOpacity
-          style={[styles.searchItem, isSelected && styles.searchItemSelected]}
+          style={styles.row}
           onPress={() => {
             onSelectDriver(item.driver_id);
             setVisible(false);
           }}
+          activeOpacity={0.75}
         >
-          <View style={styles.driverRow}>
-            <View style={[styles.teamStripe, { backgroundColor: `#${item.team_color || '888888'}` }]} />
-            <Text style={[styles.driverName, isSelected && { color: colors.f1Red, fontFamily: 'SpaceGrotesk-Bold' }]}>
-              {item.driver_id} · {item.broadcast_name} <Text style={styles.teamName}>{item.team_name}</Text>
-            </Text>
-          </View>
-          <Text style={[styles.selectText, isSelected && { color: colors.f1Red }]}>
-            {isSelected ? 'Selected' : 'Select'}
+          <View style={[styles.stripe, { backgroundColor: `#${item.team_color || '888888'}` }]} />
+          <Text style={styles.code}>{item.driver_id}</Text>
+          <Text style={styles.name} numberOfLines={1}>{item.broadcast_name}</Text>
+          <Text style={[styles.right, isSelected && { color: colors.brass }]}>
+            {isSelected ? 'Selected' : item.team_name}
           </Text>
         </TouchableOpacity>
       );
@@ -81,44 +76,43 @@ const DriverSearchSheet = forwardRef<DriverSearchSheetRef, DriverSearchSheetProp
 
     return (
       <Modal visible={visible} animationType="slide" transparent onRequestClose={() => setVisible(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setVisible(false)} />
         <KeyboardAvoidingView
-          style={styles.overlay}
+          style={styles.kav}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          pointerEvents="box-none"
         >
           <View style={styles.sheet}>
             <View style={styles.handle} />
             <View style={styles.headerRow}>
-              <Text style={typography.h3}>Select Driver</Text>
+              <Text style={styles.title}>Pick a driver</Text>
               <TouchableOpacity onPress={() => setVisible(false)}>
                 <Text style={styles.closeText}>Close</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.searchBar}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search Driver (e.g. NOR, HAM, VER)..."
-                placeholderTextColor={colors.textMuted}
-                value={query}
-                onChangeText={setQuery}
-                autoCapitalize="characters"
-              />
-              <Text>🔍</Text>
-            </View>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search driver or code — VER, HAM…"
+              placeholderTextColor={colors.textMuted}
+              value={query}
+              onChangeText={setQuery}
+              autoCapitalize="characters"
+            />
 
             <TouchableOpacity
-              style={styles.noneItem}
+              style={styles.clearRow}
               onPress={() => {
                 onSelectDriver('');
                 setVisible(false);
               }}
             >
-              <Text style={styles.noneText}>✕  None (clear this position)</Text>
+              <Text style={styles.clearText}>Clear this position</Text>
             </TouchableOpacity>
 
             {isLoading ? (
               <View style={styles.center}>
-                <ActivityIndicator color={colors.f1Red} />
+                <ActivityIndicator color={colors.brass} />
                 <Text style={styles.emptyText}>Loading grid…</Text>
               </View>
             ) : (
@@ -143,54 +137,67 @@ const DriverSearchSheet = forwardRef<DriverSearchSheetRef, DriverSearchSheetProp
 );
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(8,7,5,0.6)' },
+  kav: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bgCard,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderTopWidth: 1,
+    borderColor: colors.borderStrong,
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 16,
-    maxHeight: '85%',
-    borderTopWidth: 1,
-    borderColor: colors.borderColor,
+    paddingBottom: 20,
+    maxHeight: '80%',
   },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 12 },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, marginBottom: 12 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  closeText: { ...typography.caption, color: colors.textSecondary, fontFamily: 'SpaceGrotesk-Bold' },
-  list: { flexGrow: 0 },
-  searchBar: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+  title: { fontFamily: 'Jost-Bold', fontSize: 16, color: colors.textPrimary },
+  closeText: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+  },
+  searchInput: {
+    backgroundColor: colors.inputBg,
     borderWidth: 1,
     borderColor: colors.borderColor,
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 6,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingVertical: 11,
+    color: colors.textPrimary,
+    fontFamily: 'Karla-Regular',
+    fontSize: 13.5,
+    marginBottom: 10,
   },
-  searchInput: { flex: 1, color: colors.textPrimary, fontFamily: 'Outfit-Regular' },
-  noneItem: { paddingVertical: 12, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', marginBottom: 4 },
-  noneText: { fontFamily: 'SpaceGrotesk-Bold', fontSize: 13, color: colors.textSecondary },
+  clearRow: { paddingVertical: 11, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: colors.borderColor, marginBottom: 4 },
+  clearText: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 12.5,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+  },
+  list: { flexGrow: 0 },
   center: { paddingVertical: 32, alignItems: 'center', gap: 8 },
-  emptyText: { ...typography.caption, color: colors.textMuted, textAlign: 'center', paddingVertical: 20 },
-  searchItem: {
+  emptyText: { fontFamily: 'Karla-Regular', fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingVertical: 20 },
+  row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    gap: 10,
+    paddingVertical: 11,
     paddingHorizontal: 6,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: colors.borderFaint,
   },
-  searchItemSelected: { backgroundColor: 'rgba(225, 6, 0, 0.05)' },
-  driverRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 },
-  teamStripe: { width: 4, height: 20, borderRadius: 2 },
-  driverName: { ...typography.body, flexShrink: 1 },
-  teamName: { ...typography.caption, color: colors.textMuted },
-  selectText: { ...typography.caption },
+  stripe: { width: 4, height: 22, borderRadius: 2, flexShrink: 0 },
+  code: { fontFamily: 'Jost-Bold', fontSize: 13, width: 42, color: colors.textPrimary },
+  name: { fontFamily: 'Karla-Regular', fontSize: 13.5, color: colors.textPrimary, flex: 1 },
+  right: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.textMuted },
 });
 
 export default DriverSearchSheet;

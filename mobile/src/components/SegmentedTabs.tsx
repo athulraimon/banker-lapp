@@ -9,11 +9,9 @@ interface Props<T extends string> {
 }
 
 /**
- * Compact segmented control for switching panels within a screen.
- *
- * Deliberately small and self-contained: it sits inside a screen that already
- * has a header and the app's bottom tab bar, so anything larger would read as a
- * third level of navigation competing with those two.
+ * Full-width segmented control for switching panels within a screen
+ * (Predictions / Circuit & sessions). Oxblood marks the active panel — the same
+ * "one action" colour used across the vintage layout.
  */
 export default function SegmentedTabs<T extends string>({ options, value, onChange }: Props<T>) {
   return (
@@ -28,7 +26,7 @@ export default function SegmentedTabs<T extends string>({ options, value, onChan
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
           >
-            <Text style={[styles.label, active && styles.labelActive]}>{option.label}</Text>
+            <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>{option.label}</Text>
           </TouchableOpacity>
         );
       })}
@@ -39,32 +37,31 @@ export default function SegmentedTabs<T extends string>({ options, value, onChan
 const styles = StyleSheet.create({
   track: {
     flexDirection: 'row',
-    // Centred, and sized to its content rather than stretched full width, so it
-    // reads as a compact toggle rather than a second navigation bar.
-    alignSelf: 'center',
-    backgroundColor: colors.bgCardHeader,
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.borderColor,
-    borderRadius: 7,
-    padding: 2,
-    marginBottom: 14,
+    borderRadius: 9,
+    padding: 3,
+    marginBottom: 18,
   },
   segment: {
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 5,
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 7,
+    alignItems: 'center',
   },
   segmentActive: {
-    backgroundColor: colors.f1Red,
+    backgroundColor: colors.oxblood,
   },
   label: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 11,
-    letterSpacing: 0.5,
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
   labelActive: {
-    color: colors.textPrimary,
+    color: colors.oxbloodFg,
   },
 });

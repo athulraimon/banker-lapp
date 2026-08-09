@@ -1,19 +1,21 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { showAlert } from '../../src/components/AppDialog';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
-import { typography } from '../../src/theme/typography';
 import { racesApi, Race } from '../../src/api/races';
 import { predictionsApi, Prediction } from '../../src/api/predictions';
 import DriverSearchSheet, { DriverSearchSheetRef } from '../../src/components/DriverSearchSheet';
 import LoadingScreen from '../../src/components/LoadingScreen';
 import SegmentedTabs from '../../src/components/SegmentedTabs';
 import RaceInfoPanel from '../../src/components/RaceInfoPanel';
+import FadeInView from '../../src/components/anim/FadeInView';
 import { useDrivers } from '../../src/hooks/useDrivers';
 
 type RaceTab = 'predictions' | 'info';
+type Slot = 'pole' | 'p1' | 'p2' | 'p3';
 
 export default function PredictionEditorScreen() {
   const { id } = useLocalSearchParams();
@@ -25,16 +27,12 @@ export default function PredictionEditorScreen() {
     pole_driver_id: '',
     p1_driver_id: '',
     p2_driver_id: '',
-    p3_driver_id: ''
+    p3_driver_id: '',
   });
-  
-  // Predictions lead: that is what people open a race to do. Info is one tap
-  // away for anyone who wants the circuit and session times.
   const [tab, setTab] = useState<RaceTab>('predictions');
+  const [activeSlot, setActiveSlot] = useState<Slot | null>(null);
+  const [saved, setSaved] = useState(false);
 
-  // Which slot is currently being edited
-  const [activeSlot, setActiveSlot] = useState<'pole' | 'p1' | 'p2' | 'p3' | null>(null);
-  
   const bottomSheetRef = useRef<DriverSearchSheetRef>(null);
 
   useEffect(() => {
@@ -51,17 +49,24 @@ export default function PredictionEditorScreen() {
     }
   }, [id]);
 
+  const locked = race?.status === 'locked' || race?.status === 'completed';
+
+  const podiumCodes = [prediction.p1_driver_id, prediction.p2_driver_id, prediction.p3_driver_id].filter(Boolean);
+  const dupe = new Set(podiumCodes).size !== podiumCodes.length;
+  const filledCount = ([prediction.pole_driver_id, prediction.p1_driver_id, prediction.p2_driver_id, prediction.p3_driver_id]).filter(Boolean).length;
+  const complete = filledCount === 4 && !dupe;
+
   const handleSave = async () => {
+    if (!complete) return;
     try {
       await predictionsApi.submitPrediction(prediction);
-      showAlert('Success', 'Predictions saved successfully');
-      router.back();
+      setSaved(true);
     } catch (e: any) {
       showAlert('Error', e.response?.data?.error || 'Failed to save predictions');
     }
   };
 
-  const openDriverSearch = (slot: 'pole' | 'p1' | 'p2' | 'p3') => {
+  const openDriverSearch = (slot: Slot) => {
     setActiveSlot(slot);
     bottomSheetRef.current?.expand();
   };
@@ -69,98 +74,124 @@ export default function PredictionEditorScreen() {
   const onSelectDriver = (driverId: string) => {
     if (activeSlot) {
       setPrediction(prev => ({ ...prev, [`${activeSlot}_driver_id`]: driverId }));
+      setSaved(false);
     }
     bottomSheetRef.current?.close();
   };
 
-  const renderSlot = (slot: 'pole' | 'p1' | 'p2' | 'p3', label: string, color: string) => {
+  const renderSlot = (slot: Slot, tag: string, pole?: boolean) => {
     const driverId = prediction[`${slot}_driver_id` as keyof Prediction] as string;
     const driver = driverId ? driversById[driverId] : undefined;
-    const locked = race?.status === 'locked' || race?.status === 'completed';
+    const stripe = driver?.team_color ? `#${driver.team_color}` : colors.borderColor;
     return (
-      <View style={[styles.predictionSlot, slot === 'pole' ? styles.poleSlot : null, slot === 'p1' ? styles.p1Slot : null]}>
-        <View style={styles.slotTag}>
-          <Text style={[styles.slotTagText, { color }]}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.slot, pole && styles.slotPole]}
+        onPress={() => openDriverSearch(slot)}
+        disabled={locked}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.slotTag, pole ? styles.slotTagPole : styles.slotTagPodium]}>
+          <Text style={[styles.slotTagText, pole && { color: colors.heroBottom }]}>{tag}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.slotInputTrigger}
-          onPress={() => openDriverSearch(slot)}
-          disabled={locked}
-        >
-          {driverId ? (
-            <>
-              <Text style={styles.driverName}>
-                {driver ? `${driverId} · ${driver.broadcast_name}` : driverId}
-              </Text>
-              <View style={[styles.driverTeamPill, driver?.team_color ? { backgroundColor: `#${driver.team_color}` } : null]}>
-                <Text style={styles.driverTeamText}>{driver?.team_name ?? 'TEAM'}</Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.placeholder}>Select {label} Driver...</Text>
-              <Text>⚡</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[styles.slotLabel, { color: driverId ? colors.textPrimary : colors.textMuted }]} numberOfLines={1}>
+            {driverId ? (driver ? `${driverId} · ${driver.broadcast_name}` : driverId) : 'Tap to choose'}
+          </Text>
+          <Text style={styles.slotTeam} numberOfLines={1}>{driver?.team_name ?? 'Empty slot'}</Text>
+        </View>
+        <View style={[styles.slotStripe, { backgroundColor: stripe }]} />
+      </TouchableOpacity>
     );
   };
 
   if (!race) return <LoadingScreen label="Loading race…" />;
 
+  const fp1 = new Date(race.fp1_time).getTime();
+  const ms = Math.max(0, fp1 - Date.now());
+  const closesIn = `${Math.floor(ms / 86400000)}d ${Math.floor((ms / 3600000) % 24)}h`;
+
+  const saveLabel = saved ? 'Picks saved ✓' : complete ? 'Save picks' : dupe ? 'Fix duplicate picks' : 'Choose all four to save';
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
+        {/* Sticky header */}
         <View style={styles.header}>
-          <Text style={styles.appTitle}>Edit Predictions</Text>
-          {race.status === 'locked' && <Text style={styles.lockedWarning}>LOCKED</Text>}
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={8}>
+            <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{race.grand_prix}</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>
+              {locked ? 'Predictions locked' : `Closes in ${closesIn}`}
+            </Text>
+          </View>
+          <Text style={[styles.badge, locked ? styles.badgeLocked : styles.badgeOpen]}>
+            {locked ? 'Locked' : 'Open'}
+          </Text>
         </View>
 
         <ScrollView
           style={styles.content}
           contentContainerStyle={styles.contentInner}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View style={{ marginBottom: 14 }}>
-            <Text style={styles.raceTitle}>{race.grand_prix.toUpperCase()}</Text>
-            <Text style={styles.raceSubtitle}>{race.circuit_name}</Text>
-          </View>
-
           <SegmentedTabs<RaceTab>
             value={tab}
             onChange={setTab}
             options={[
               { value: 'predictions', label: 'Predictions' },
-              { value: 'info', label: 'Info' },
+              { value: 'info', label: 'Circuit & sessions' },
             ]}
           />
 
           {tab === 'predictions' ? (
-            <>
-              <Text style={typography.sectionHeaderCompact}>Qualifying Performance</Text>
-              {renderSlot('pole', 'POLE', colors.accentGold)}
+            <FadeInView>
+              <Text style={styles.eyebrow}>Qualifying · 5 pts</Text>
+              {renderSlot('pole', 'POLE', true)}
 
-              <Text style={typography.sectionHeaderCompact}>Podium Grid Lineup</Text>
-              {renderSlot('p1', 'P1', colors.f1Red)}
-              {renderSlot('p2', 'P2', colors.textSecondary)}
-              {renderSlot('p3', 'P3', colors.textSecondary)}
+              <Text style={[styles.eyebrow, { marginTop: 22 }]}>Podium · 15 / 10 / 8 pts</Text>
+              {renderSlot('p1', 'P1')}
+              {renderSlot('p2', 'P2')}
+              {renderSlot('p3', 'P3')}
 
-              <TouchableOpacity
-                style={[styles.btn, race.status === 'locked' && { opacity: 0.5 }]}
-                onPress={handleSave}
-                disabled={race.status === 'locked'}
-              >
-                <Text style={styles.btnText}>Save Submissions</Text>
-              </TouchableOpacity>
-            </>
+              {dupe && (
+                <View style={styles.warn}>
+                  <Text style={styles.warnText}>P1, P2 and P3 must be three different drivers.</Text>
+                </View>
+              )}
+
+              <Text style={styles.note}>
+                Only exact matches score. Your pole pick can also be your P1. Edit as often as you like until Practice 1.
+              </Text>
+            </FadeInView>
           ) : (
             <RaceInfoPanel race={race} />
           )}
         </ScrollView>
 
-        <DriverSearchSheet 
-          ref={bottomSheetRef} 
+        {/* Pinned save bar (predictions tab, editable races only) */}
+        {tab === 'predictions' && !locked && (
+          <View style={styles.saveBarWrap}>
+            <TouchableOpacity
+              style={[
+                styles.saveBar,
+                { backgroundColor: saved ? colors.racingGreen : complete ? colors.oxblood : colors.heroTop },
+              ]}
+              onPress={handleSave}
+              disabled={!complete}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.saveBarText, { color: saved || complete ? colors.oxbloodFg : colors.textMuted }]}>
+                {saveLabel}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <DriverSearchSheet
+          ref={bottomSheetRef}
           onSelectDriver={onSelectDriver}
           selectedDrivers={[prediction.pole_driver_id, prediction.p1_driver_id, prediction.p2_driver_id, prediction.p3_driver_id]}
         />
@@ -170,114 +201,108 @@ export default function PredictionEditorScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bgCarbon,
-  },
+  container: { flex: 1, backgroundColor: colors.bgPhone },
   header: {
-    height: 56,
-    backgroundColor: colors.bgCard,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderColor,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
     paddingHorizontal: 16,
-    marginTop: 48,
+    paddingTop: 56,
+    paddingBottom: 12,
+    backgroundColor: colors.bgPhone,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderFaint,
   },
-  appTitle: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 18,
+  backBtn: {
+    width: 30, height: 30, borderRadius: 8,
+    borderWidth: 1, borderColor: colors.borderColor,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: {
+    fontFamily: 'Jost-Bold',
+    fontSize: 15,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
     color: colors.textPrimary,
   },
-  lockedWarning: {
-    fontSize: 12,
-    color: colors.statusLocked,
-    fontFamily: 'SpaceGrotesk-Bold',
-  },
-  content: {
-    flex: 1,
-  },
-  // The Info tab is taller than the viewport on a phone, so the screen scrolls
-  // now. Bottom padding keeps the last row clear of the tab bar.
-  contentInner: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  raceTitle: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 18,
-    color: colors.textPrimary,
-  },
-  raceSubtitle: {
-    ...typography.caption,
-    marginTop: 4,
-  },
-  predictionSlot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderWidth: 1,
-    borderColor: colors.borderColor,
-    borderRadius: 8,
-    marginBottom: 12,
+  headerSub: { fontFamily: 'Karla-Regular', fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+
+  badge: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
     overflow: 'hidden',
   },
-  poleSlot: {
-    borderColor: 'rgba(255, 183, 3, 0.3)',
-  },
-  p1Slot: {
-    borderColor: 'rgba(225, 6, 0, 0.3)',
-  },
-  slotTag: {
-    width: 60,
-    backgroundColor: colors.bgCardHeader,
-    borderRightWidth: 1,
-    borderRightColor: colors.borderColor,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  slotTagText: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 14,
-  },
-  slotInputTrigger: {
-    flex: 1,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  driverName: {
-    ...typography.body,
-  },
-  placeholder: {
-    ...typography.body,
-    color: colors.textMuted,
-  },
-  driverTeamPill: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  driverTeamText: {
-    fontSize: 10,
+  badgeOpen: { backgroundColor: 'rgba(47,107,79,0.18)', color: colors.accentGreen, borderWidth: 1, borderColor: 'rgba(47,107,79,0.5)' },
+  badgeLocked: { backgroundColor: 'rgba(168,41,28,0.15)', color: colors.redText, borderWidth: 1, borderColor: 'rgba(168,41,28,0.5)' },
+
+  content: { flex: 1 },
+  contentInner: { padding: 16, paddingBottom: 120 },
+  eyebrow: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2.4,
     textTransform: 'uppercase',
     color: colors.textSecondary,
+    marginBottom: 10,
   },
-  btn: {
-    backgroundColor: colors.f1Red,
-    padding: 14,
-    borderRadius: 8,
+
+  slot: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 15,
+    gap: 12,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: colors.borderColor,
+    backgroundColor: colors.bgCard,
+    borderRadius: 10,
+    marginBottom: 10,
   },
-  btnText: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 16,
-    color: colors.textPrimary,
+  slotPole: { borderColor: colors.borderStrong, marginBottom: 0 },
+  slotTag: {
+    width: 44, height: 32, borderRadius: 5,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  slotTagPole: { backgroundColor: colors.brass },
+  slotTagPodium: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderStrong },
+  slotTagText: { fontFamily: 'Jost-Bold', fontSize: 12, letterSpacing: 0.5, color: colors.textPrimary },
+  slotLabel: { fontFamily: 'Jost-SemiBold', fontSize: 14.5 },
+  slotTeam: { fontFamily: 'Karla-Regular', fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  slotStripe: { width: 4, height: 26, borderRadius: 2 },
+
+  warn: {
+    marginTop: 10,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(168,41,28,0.55)',
+    backgroundColor: 'rgba(168,41,28,0.12)',
+    borderRadius: 8,
+  },
+  warnText: { fontFamily: 'Karla-Regular', fontSize: 12.5, color: colors.redText },
+  note: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.textMuted, marginTop: 14, lineHeight: 18 },
+
+  saveBarWrap: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 22,
+    backgroundColor: colors.bgPhone,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderFaint,
+  },
+  saveBar: { borderRadius: 9, paddingVertical: 15, alignItems: 'center' },
+  saveBarText: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
-  }
+  },
 });

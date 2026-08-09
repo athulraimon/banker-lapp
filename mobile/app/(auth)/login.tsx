@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { showAlert } from '../../src/components/AppDialog';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
 import { authApi } from '../../src/api/auth';
 import { useAuthStore } from '../../src/store/useAuthStore';
+import FadeInView from '../../src/components/anim/FadeInView';
+import PressableScale from '../../src/components/anim/PressableScale';
+import CheckerStripe from '../../src/components/CheckerStripe';
+import { motion } from '../../src/theme/motion';
 // Resolves to googleAuth.ts (Play Services) on native and googleAuth.web.ts
 // (OIDC redirect) on web, so this screen is identical on both platforms.
 import { signInWithGoogle, completeGoogleRedirect, GoogleAuthResult } from '../../src/auth/googleAuth';
@@ -56,13 +60,16 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerContainer}>
+      <FadeInView style={styles.headerContainer} offsetY={18} duration={motion.slow}>
+        <View style={styles.checker}>
+          <CheckerStripe colorA={colors.cream} colorB={colors.bgCarbon} height={8} cell={8} />
+        </View>
         <Text style={typography.h1}>Banker <Text style={styles.highlight}>Lapp</Text></Text>
         <Text style={styles.subtitle}>Formula 1 Private Predictions Championship</Text>
-      </View>
+      </FadeInView>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
+      <FadeInView style={styles.buttonContainer} delay={motion.base} offsetY={18} duration={motion.slow}>
+        <PressableScale
           style={[styles.googleButton, busy && styles.googleButtonDisabled]}
           onPress={handleGoogleSignIn}
           disabled={busy}
@@ -72,8 +79,8 @@ export default function LoginScreen() {
           ) : (
             <Text style={styles.googleButtonText}>Sign In with Google</Text>
           )}
-        </TouchableOpacity>
-      </View>
+        </PressableScale>
+      </FadeInView>
     </View>
   );
 }
@@ -89,8 +96,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 60,
   },
+  checker: {
+    width: 120,
+    height: 8,
+    overflow: 'hidden',
+    borderRadius: 2,
+    marginBottom: 20,
+  },
   highlight: {
-    color: colors.f1Red,
+    color: colors.brass,
   },
   subtitle: {
     ...typography.bodySmall,

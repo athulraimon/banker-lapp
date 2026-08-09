@@ -3,8 +3,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useAuthStore } from '../src/store/useAuthStore';
 import { useFonts } from 'expo-font';
-import { SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
-import { Outfit_400Regular } from '@expo-google-fonts/outfit';
+import { Jost_500Medium, Jost_600SemiBold, Jost_700Bold } from '@expo-google-fonts/jost';
+import { Karla_400Regular, Karla_700Bold } from '@expo-google-fonts/karla';
 import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
@@ -42,8 +42,16 @@ const FONT_TIMEOUT_MS = 3000;
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    'SpaceGrotesk-Bold': SpaceGrotesk_700Bold,
-    'Outfit-Regular': Outfit_400Regular,
+    // New vintage type system.
+    'Jost-Bold': Jost_700Bold,
+    'Jost-SemiBold': Jost_600SemiBold,
+    'Jost-Medium': Jost_500Medium,
+    'Karla-Regular': Karla_400Regular,
+    'Karla-Bold': Karla_700Bold,
+    // Legacy aliases so screens still referencing the old family names keep
+    // rendering in the vintage type until they are migrated.
+    'SpaceGrotesk-Bold': Jost_700Bold,
+    'Outfit-Regular': Karla_400Regular,
   });
   const [fontsTimedOut, setFontsTimedOut] = useState(false);
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,13 +6,24 @@ import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import { racesApi, Race } from '../../src/api/races';
-import { countryFlag, usesTextFallback } from '../../src/utils/flags';
+import { predictionsApi, Prediction } from '../../src/api/predictions';
+import FadeInView from '../../src/components/anim/FadeInView';
+import PressableScale from '../../src/components/anim/PressableScale';
+import CheckerStripe from '../../src/components/CheckerStripe';
+import { Skeleton } from '../../src/components/Skeleton';
+import { staggerDelay } from '../../src/theme/motion';
+
+const pad = (n: number) => String(Math.max(0, Math.floor(n))).padStart(2, '0');
 
 export default function DashboardScreen() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const router = useRouter();
   const [races, setRaces] = useState<Race[]>([]);
+  const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [tab, setTab] = useState<'upcoming' | 'completed'>('upcoming');
+  const [loading, setLoading] = useState(true);
+  // Ticks once a second so the hero countdown stays live.
+  const [now, setNow] = useState(Date.now());
 
   // Refetch races whenever the tab gains focus so status changes (e.g. an admin
   // setting results) show up without restarting the app.
@@ -28,142 +39,227 @@ export default function DashboardScreen() {
           useAuthStore.getState().logout();
           router.replace('/(auth)/login');
         }
-      });
+      }).finally(() => setLoading(false));
     }, [isAuthenticated])
   );
 
   // A Grand Prix counts as finished 2h15m after lights out, at which point the
   // next one becomes the active GP on the dashboard. Kept in step with
-  // domain.RaceDuration on the backend, which opens the next race's prediction
-  // window at the same moment — if these two drift, the highlighted race and
-  // its "open" badge disagree.
+  // domain.RaceDuration on the backend.
   const RACE_OVER_BUFFER_MS = (2 * 60 + 15) * 60 * 1000;
   const isWeekendOver = (r: Race) => Date.now() > new Date(r.race_time).getTime() + RACE_OVER_BUFFER_MS;
-  // Active GP = the race whose weekend is happening now; once it's over this
-  // rolls over to the next upcoming race (races are already ordered by time).
-  const upcomingRace = races.find(r => !isWeekendOver(r));
-  const upcomingRaces = races.filter(r => !isWeekendOver(r) && r.id !== upcomingRace?.id);
+
+  // Round numbers are derived from season order — the Race payload has no round
+  // field. Sorting defensively in case the API order ever changes.
+  const roundById = useMemo(() => {
+    const map: Record<string, number> = {};
+    [...races]
+      .sort((a, b) => new Date(a.race_time).getTime() - new Date(b.race_time).getTime())
+      .forEach((r, i) => { map[r.id] = i + 1; });
+    return map;
+  }, [races]);
+
+  const activeRace = races.find(r => !isWeekendOver(r));
+  const upcomingRaces = races.filter(r => !isWeekendOver(r) && r.id !== activeRace?.id);
   const completedRaces = races.filter(r => isWeekendOver(r));
   const listData = tab === 'upcoming' ? upcomingRaces : completedRaces;
 
-  const renderRaceCard = ({ item }: { item: Race }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => {
-        if (isWeekendOver(item)) {
-          router.push(`/race/${item.id}/results`);
-        } else {
-          router.push(`/race/${item.id}`);
-        }
-      }}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.flag, usesTextFallback() && styles.flagCode]}>
-            {countryFlag(item.country)}
-          </Text>
-          <View style={styles.titleText}>
-            <Text style={styles.gpName}>{item.grand_prix}</Text>
-            <Text style={styles.circuitName}>{item.circuit_name}{item.country ? ` · ${item.country}` : ''}</Text>
-          </View>
-        </View>
-        {item.status === 'open' && <Text style={[styles.badge, styles.badgeOpen]}>Predictions Open</Text>}
-        {item.status === 'locked' && <Text style={[styles.badge, styles.badgeLocked]}>Locked</Text>}
-        {item.status === 'completed' && <Text style={[styles.badge, styles.badgeCompleted]}>Finished</Text>}
-      </View>
-    </TouchableOpacity>
+  // Pull the user's picks for the active race so the hero can show progress.
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeRace) { setPrediction(null); return; }
+      predictionsApi.getPrediction(activeRace.id).then(setPrediction).catch(() => setPrediction(null));
+    }, [activeRace?.id])
   );
+
+  const fp1 = activeRace ? new Date(activeRace.fp1_time).getTime() : 0;
+  const isOpen = !!activeRace && now < fp1;
+
+  // Keep the 1s ticker alive only while there is an open race to count down to.
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isOpen]);
+
+  const ms = Math.max(0, fp1 - now);
+  const cd = {
+    d: pad(ms / 86400000),
+    h: pad((ms / 3600000) % 24),
+    m: pad((ms / 60000) % 60),
+    s: pad((ms / 1000) % 60),
+  };
+
+  const pickCount = prediction
+    ? (['pole_driver_id', 'p1_driver_id', 'p2_driver_id', 'p3_driver_id'] as const)
+        .filter(k => prediction[k]).length
+    : 0;
+  const heroCta = !isOpen
+    ? 'View your picks'
+    : pickCount === 4 ? 'Review your picks' : pickCount > 0 ? 'Finish your picks' : 'Make your picks';
+
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+  const statusFor = (r: Race): { label: string; color: string } => {
+    if (isWeekendOver(r)) return { label: 'Finished', color: colors.textSecondary };
+    if (Date.now() < new Date(r.fp1_time).getTime()) return { label: 'Opens', color: colors.accentGreen };
+    return { label: 'Locked', color: colors.redText };
+  };
+
+  const openRace = (r: Race) => {
+    if (isWeekendOver(r)) router.push(`/race/${r.id}/results`);
+    else router.push(`/race/${r.id}`);
+  };
+
+  const renderRaceRow = ({ item, index }: { item: Race; index: number }) => {
+    const st = statusFor(item);
+    return (
+      <FadeInView delay={staggerDelay(index)} offsetY={8}>
+        <PressableScale style={styles.calRow} scaleTo={0.985} onPress={() => openRace(item)}>
+          <View style={styles.roundPlate}>
+            <Text style={styles.roundPlateText}>{pad(roundById[item.id] ?? index + 1)}</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.calName} numberOfLines={1}>{item.grand_prix}</Text>
+            <Text style={styles.calSub} numberOfLines={1}>{item.circuit_name}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={[styles.calStatus, { color: st.color }]}>{st.label}</Text>
+            <Text style={styles.calDate}>{fmtDate(item.race_time)}</Text>
+          </View>
+        </PressableScale>
+      </FadeInView>
+    );
+  };
+
+  const showSkeleton = loading && races.length === 0;
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.topBar}>
         <View style={{ flex: 1 }}>
-          <Text style={typography.h2}>Dashboard</Text>
-          <Text style={styles.greeting}>Welcome back, {user?.display_name || 'Driver'}!</Text>
+          <Text style={styles.eyebrow}>Season 2026</Text>
+          <Text style={styles.greeting}>Good luck, {user?.display_name || 'Driver'}</Text>
         </View>
         <TouchableOpacity style={styles.logoutBtn} onPress={logout} hitSlop={8}>
-          <Ionicons name="log-out-outline" size={22} color={colors.textSecondary} />
+          <Ionicons name="log-out-outline" size={17} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
-      {upcomingRace && (
+      {showSkeleton && (
         <>
-          <Text style={typography.sectionHeaderCompact}>Active Grand Prix</Text>
-          <TouchableOpacity 
-            style={[styles.card, { borderColor: colors.f1Red }]}
-            onPress={() => {
-              if (isWeekendOver(upcomingRace)) {
-                router.push(`/race/${upcomingRace.id}/results`);
-              } else {
-                router.push(`/race/${upcomingRace.id}`);
-              }
-            }}
-          >
-            <View style={styles.cardHeader}>
-              <View style={styles.titleRow}>
-                <Text style={[styles.flag, usesTextFallback() && styles.flagCode]}>
-                  {countryFlag(upcomingRace.country)}
-                </Text>
-                <View style={styles.titleText}>
-                  <Text style={styles.gpName}>{upcomingRace.grand_prix}</Text>
-                  <Text style={styles.circuitName}>{upcomingRace.circuit_name}{upcomingRace.country ? ` · ${upcomingRace.country}` : ''}</Text>
-                </View>
+          <Skeleton width={'100%'} height={230} radius={14} style={{ marginBottom: 24 }} />
+          <Skeleton width={'40%'} height={12} style={{ marginBottom: 16 }} />
+          {[0, 1, 2, 3].map(i => (
+            <View key={i} style={styles.calRow}>
+              <Skeleton width={34} height={34} radius={17} />
+              <View style={{ flex: 1 }}>
+                <Skeleton width={'60%'} height={14} />
+                <Skeleton width={'40%'} height={11} style={{ marginTop: 6 }} />
               </View>
-              {Date.now() < new Date(upcomingRace.fp1_time).getTime() ? (
-                <Text style={[styles.badge, styles.badgeOpen]}>Predictions Open</Text>
-              ) : (
-                <Text style={[styles.badge, styles.badgeLocked]}>Locked</Text>
-              )}
+              <Skeleton width={40} height={12} />
             </View>
-            <View style={styles.cardBody}>
-              <View style={styles.countdownStrip}>
-                {Date.now() < new Date(upcomingRace.fp1_time).getTime() ? (
-                  <>
-                    <Text style={styles.countdownLabel}>Closes at FP1:</Text>
-                    <Text style={styles.countdownTime}>{new Date(upcomingRace.fp1_time).toLocaleDateString()}</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.countdownLabel}>Race day:</Text>
-                    <Text style={styles.countdownTime}>{new Date(upcomingRace.race_time).toLocaleDateString()}</Text>
-                  </>
-                )}
-              </View>
-            </View>
-          </TouchableOpacity>
+          ))}
         </>
       )}
 
-      <Text style={typography.sectionHeaderCompact}>Calendar</Text>
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabItem, tab === 'upcoming' && styles.tabItemActive]}
-          onPress={() => setTab('upcoming')}
-        >
-          <Text style={[styles.tabText, tab === 'upcoming' && styles.tabTextActive]}>
-            Upcoming ({upcomingRaces.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabItem, tab === 'completed' && styles.tabItemActive]}
-          onPress={() => setTab('completed')}
-        >
-          <Text style={[styles.tabText, tab === 'completed' && styles.tabTextActive]}>
-            Completed ({completedRaces.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-      <FlatList
-        data={listData}
-        renderItem={renderRaceCard}
-        keyExtractor={item => item.id}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>
-            {tab === 'upcoming' ? 'No upcoming races.' : 'No completed races yet.'}
-          </Text>
-        }
-      />
+      {!showSkeleton && (
+        <FlatList
+          data={listData}
+          renderItem={renderRaceRow}
+          keyExtractor={item => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          ListHeaderComponent={
+            <>
+              {/* Hero: active Grand Prix */}
+              {activeRace && (
+                <FadeInView>
+                  <PressableScale style={styles.hero} scaleTo={0.99} onPress={() => openRace(activeRace)}>
+                    <CheckerStripe colorA={colors.brass} colorB={colors.brassDim} />
+                    <View style={styles.heroBody}>
+                      <View style={styles.heroHead}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.heroEyebrow}>
+                            Round {pad(roundById[activeRace.id] ?? 0)} · Next up
+                          </Text>
+                          <Text style={styles.heroTitle}>{activeRace.grand_prix}</Text>
+                          <Text style={styles.heroSub}>
+                            {activeRace.circuit_name}{activeRace.country ? ` · ${activeRace.country}` : ''}
+                          </Text>
+                        </View>
+                        <Text style={[styles.badge, isOpen ? styles.badgeOpen : styles.badgeLocked]}>
+                          {isOpen ? 'Open' : 'Locked'}
+                        </Text>
+                      </View>
+
+                      {isOpen ? (
+                        <>
+                          <View style={styles.countdown}>
+                            {[
+                              { v: cd.d, l: 'days' },
+                              { v: cd.h, l: 'hrs' },
+                              { v: cd.m, l: 'min' },
+                              { v: cd.s, l: 'sec', accent: true },
+                            ].map((seg, i) => (
+                              <React.Fragment key={seg.l}>
+                                {i > 0 && <View style={styles.cdDivider} />}
+                                <View style={styles.cdCell}>
+                                  <Text style={[styles.cdValue, seg.accent && { color: colors.brass }]}>{seg.v}</Text>
+                                  <Text style={styles.cdLabel}>{seg.l}</Text>
+                                </View>
+                              </React.Fragment>
+                            ))}
+                          </View>
+                          <Text style={styles.lockNote}>
+                            Picks lock when Practice 1 starts · {new Date(activeRace.fp1_time).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                          </Text>
+
+                          <View style={styles.progressRow}>
+                            <View style={styles.progressTrack}>
+                              <View style={[styles.progressFill, { width: `${(pickCount / 4) * 100}%` }]} />
+                            </View>
+                            <Text style={styles.progressLabel}>{pickCount}/4 picked</Text>
+                          </View>
+                        </>
+                      ) : (
+                        <Text style={[styles.lockNote, { marginTop: 12 }]}>
+                          Predictions are locked — the weekend is under way.
+                        </Text>
+                      )}
+
+                      <View style={styles.heroCta}>
+                        <Text style={styles.heroCtaText}>{heroCta}</Text>
+                      </View>
+                    </View>
+                  </PressableScale>
+                </FadeInView>
+              )}
+
+              {/* Calendar header + tabs */}
+              <View style={styles.calHead}>
+                <Text style={styles.calHeadLabel}>Calendar</Text>
+                <View style={styles.calRule} />
+                <View style={styles.pillRow}>
+                  <TouchableOpacity onPress={() => setTab('upcoming')} style={[styles.pill, tab === 'upcoming' && styles.pillActive]}>
+                    <Text style={[styles.pillText, tab === 'upcoming' && styles.pillTextActive]}>Upcoming {upcomingRaces.length}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setTab('completed')} style={[styles.pill, tab === 'completed' && styles.pillActive]}>
+                    <Text style={[styles.pillText, tab === 'completed' && styles.pillTextActive]}>Done {completedRaces.length}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          }
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>
+              {tab === 'upcoming' ? 'No upcoming races.' : 'No completed races yet.'}
+            </Text>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -171,157 +267,211 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    paddingTop: 48,
+    paddingHorizontal: 18,
+    paddingTop: 54,
     backgroundColor: colors.bgCarbon,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 20,
+  },
+  eyebrow: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2.4,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
   },
   greeting: {
-    ...typography.body,
+    fontFamily: 'Jost-Bold',
+    fontSize: 26,
+    letterSpacing: -0.3,
+    color: colors.textPrimary,
     marginTop: 2,
   },
   logoutBtn: {
-    padding: 8,
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
     borderColor: colors.borderColor,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 10,
-    padding: 4,
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  tabItemActive: {
-    backgroundColor: colors.f1Red,
+
+  // Hero card
+  hero: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: colors.heroTop,
+    marginBottom: 24,
   },
-  tabText: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 13,
+  heroBody: { padding: 16 },
+  heroHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  heroEyebrow: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: colors.brass,
+  },
+  heroTitle: {
+    fontFamily: 'Jost-Bold',
+    fontSize: 22,
+    color: colors.textPrimary,
+    marginTop: 4,
+  },
+  heroSub: {
+    fontFamily: 'Karla-Regular',
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  countdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.borderColor,
+  },
+  cdCell: { flex: 1, alignItems: 'center' },
+  cdDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.borderColor },
+  cdValue: {
+    fontFamily: 'Jost-Bold',
+    fontSize: 22,
+    color: colors.textPrimary,
+    fontVariant: ['tabular-nums'],
+  },
+  cdLabel: {
+    fontFamily: 'Karla-Regular',
+    fontSize: 9,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  lockNote: {
+    fontFamily: 'Karla-Regular',
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  progressTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: colors.brass, borderRadius: 3 },
+  progressLabel: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
     color: colors.textSecondary,
   },
-  tabTextActive: {
-    color: '#fff',
+  heroCta: {
+    marginTop: 14,
+    backgroundColor: colors.oxblood,
+    borderRadius: 8,
+    paddingVertical: 13,
+    alignItems: 'center',
   },
+  heroCtaText: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: colors.oxbloodFg,
+  },
+
+  // Badges
+  badge: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  badgeOpen: {
+    backgroundColor: 'rgba(47,107,79,0.18)',
+    color: colors.accentGreen,
+    borderWidth: 1,
+    borderColor: 'rgba(47,107,79,0.5)',
+  },
+  badgeLocked: {
+    backgroundColor: 'rgba(168,41,28,0.15)',
+    color: colors.redText,
+    borderWidth: 1,
+    borderColor: 'rgba(168,41,28,0.5)',
+  },
+
+  // Calendar
+  calHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 },
+  calHeadLabel: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2.4,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+  },
+  calRule: { flex: 1, height: 1, backgroundColor: colors.borderColor },
+  pillRow: { flexDirection: 'row', gap: 4 },
+  pill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: 'transparent' },
+  pillActive: { backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong },
+  pillText: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+  },
+  pillTextActive: { color: colors.textPrimary },
+  calRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderFaint,
+  },
+  roundPlate: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roundPlateText: {
+    fontFamily: 'Jost-Bold',
+    fontSize: 12,
+    color: colors.brass,
+  },
+  calName: { fontFamily: 'Jost-SemiBold', fontSize: 15, color: colors.textPrimary },
+  calSub: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.textSecondary, marginTop: 1 },
+  calStatus: { fontFamily: 'Jost-SemiBold', fontSize: 12, fontWeight: '600' },
+  calDate: { fontFamily: 'Karla-Regular', fontSize: 11, color: colors.textMuted, marginTop: 2 },
   emptyText: {
-    ...typography.body,
+    fontFamily: 'Karla-Regular',
     color: colors.textMuted,
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 24,
   },
-  card: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.borderColor,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    backgroundColor: colors.bgCardHeader,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderColor,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  cardBody: {
-    padding: 16,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  titleText: {
-    flexShrink: 1,
-  },
-  flag: {
-    fontSize: 28,
-  },
-  // Applied only where the platform has no flag glyphs and countryFlag()
-  // returns an ISO code. A 28px "AU" would tower over the GP name, so it is
-  // rendered as a small badge occupying roughly the same box as the emoji.
-  flagCode: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 13,
-    color: colors.textSecondary,
-    backgroundColor: colors.bgCardHeader,
-    borderWidth: 1,
-    borderColor: colors.borderColor,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    overflow: 'hidden',
-  },
-  gpName: {
-    ...typography.h3,
-    fontSize: 16,
-  },
-  circuitName: {
-    ...typography.caption,
-  },
-  countdownStrip: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.f1Red,
-    padding: 12,
-    borderRadius: 8,
-  },
-  countdownLabel: {
-    ...typography.caption,
-    color: 'rgba(255,255,255,0.8)',
-    textTransform: 'uppercase',
-    fontWeight: '700',
-  },
-  countdownTime: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 16,
-    color: colors.textPrimary,
-  },
-  badge: {
-    fontFamily: 'SpaceGrotesk-Bold',
-    fontSize: 10,
-    textTransform: 'uppercase',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  badgeOpen: {
-    backgroundColor: 'rgba(0, 245, 212, 0.15)',
-    color: colors.accentGreen,
-    borderColor: 'rgba(0, 245, 212, 0.3)',
-    borderWidth: 1,
-  },
-  badgeLocked: {
-    backgroundColor: 'rgba(255, 51, 51, 0.15)',
-    color: colors.statusLocked,
-    borderColor: 'rgba(255, 51, 51, 0.3)',
-    borderWidth: 1,
-  },
-  badgeCompleted: {
-    backgroundColor: 'rgba(148, 163, 184, 0.15)',
-    color: colors.textSecondary,
-    borderColor: 'rgba(148, 163, 184, 0.3)',
-    borderWidth: 1,
-  }
 });
-
