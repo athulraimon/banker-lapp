@@ -80,3 +80,7 @@ jobs:
           test -f dist/manifest.json
           test -f dist/sw.js
           test -f dist/icons/apple-touch-icon.png
+          # The pre-hydration launch screen in +html.tsx hardcodes this path, so
+          # a missing file means every cold load opens on a broken image.
+          test -f dist/icons/loading-car.gif
+          test -f dist/icons/icon-512.png
