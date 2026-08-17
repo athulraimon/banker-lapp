@@ -6,14 +6,15 @@
 // handles in-session caching.
 //
 // Strategy:
-//   - navigations  -> network first, fall back to the cached app shell
-//   - static assets -> stale-while-revalidate
+//   - navigations   -> network first, fall back to the cached app shell
+//   - build assets  -> stale-while-revalidate (content-hashed, so safe)
+//   - icons/manifest-> never cached; the install flow reads these
 //   - everything else (API, Google) -> straight to the network, untouched
 
-// Bump this whenever the icons or splash art change. /icons/ is cached
-// stale-while-revalidate, so without a bump an installed client keeps painting
-// the previous mark until each file happens to revalidate.
-const VERSION = 'v2';
+// Bump this whenever the cached asset set changes; `activate` deletes every
+// cache that is not the current pair, which is the only way an existing client
+// drops a bad entry.
+const VERSION = 'v3';
 const SHELL_CACHE = `banker-lapp-shell-${VERSION}`;
 const ASSET_CACHE = `banker-lapp-assets-${VERSION}`;
 const SHELL_URL = '/';
@@ -22,7 +23,10 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(SHELL_CACHE)
-      .then((cache) => cache.addAll([SHELL_URL, '/manifest.json']))
+      // Only the shell. The manifest is deliberately NOT precached — see
+      // isStaticAsset for why anything the install flow reads must stay
+      // uncached.
+      .then((cache) => cache.addAll([SHELL_URL]))
       // A failed precache must not block installation; the fetch handler will
       // populate the cache on first successful navigation instead.
       .catch(() => undefined)
@@ -45,12 +49,21 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// What may be served from cache.
+//
+// /icons/, /favicon.png and /manifest.json are deliberately excluded, even
+// though they are the most obviously cacheable files here. They are what the
+// browser reads to mint the installed app's launcher icon and splash screen,
+// and unlike /_expo/ and /assets/ they carry no content hash in their names — so
+// one cached copy pins the home-screen icon to an old build. It survives
+// uninstalling the app too, because Cache Storage belongs to the origin and
+// outlives the installed PWA, which makes it look unfixable from the phone.
+// Costing a few KB of network on those is worth far more than that.
 function isStaticAsset(url) {
   return (
     url.pathname.startsWith('/_expo/') ||
     url.pathname.startsWith('/assets/') ||
-    url.pathname.startsWith('/icons/') ||
-    /\.(js|css|png|jpg|jpeg|svg|woff2?|ttf)$/.test(url.pathname)
+    /\.(js|css|woff2?|ttf)$/.test(url.pathname)
   );
 }
 
