@@ -34,13 +34,23 @@ func scanRace(row pgx.Row, race *domain.Race) error {
 func (r *RaceRepository) UpsertRace(ctx context.Context, race *domain.Race) error {
 	// If official results already exist for this race, keep it "completed" so a
 	// schedule re-sync never reverts an admin-entered result to a time-based status.
+	//
+	// The name/circuit/country are refreshed alongside the times, because
+	// api_race_id encodes the round number and the FIA renumbers rounds when a
+	// race is added, dropped or reordered mid-season. Updating only the times
+	// left round N carrying the previous calendar's name with the new
+	// calendar's dates — every race after the insertion point displayed the
+	// following race's schedule, and the final round appeared twice.
 	query := `
 		INSERT INTO races (api_race_id, grand_prix, circuit_name, country,
 			fp1_time, fp2_time, fp3_time, sprint_qualifying_time, sprint_time,
 			qualifying_time, race_time, season, status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (api_race_id) DO UPDATE
-		SET fp1_time = EXCLUDED.fp1_time,
+		SET grand_prix = EXCLUDED.grand_prix,
+			circuit_name = EXCLUDED.circuit_name,
+			country = EXCLUDED.country,
+			fp1_time = EXCLUDED.fp1_time,
 			fp2_time = EXCLUDED.fp2_time,
 			fp3_time = EXCLUDED.fp3_time,
 			sprint_qualifying_time = EXCLUDED.sprint_qualifying_time,
@@ -63,6 +73,57 @@ func (r *RaceRepository) UpsertRace(ctx context.Context, race *domain.Race) erro
 func (r *RaceRepository) GetRacesBySeason(ctx context.Context, season int) ([]domain.Race, error) {
 	query := `SELECT ` + raceColumns + ` FROM races WHERE season = $1 ORDER BY race_time ASC`
 	rows, err := r.db.Query(ctx, query, season)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	races := make([]domain.Race, 0)
+	for rows.Next() {
+		var race domain.Race
+		if err := scanRace(rows, &race); err != nil {
+			return nil, err
+		}
+		races = append(races, race)
+	}
+	return races, rows.Err()
+}
+
+// DeleteStaleRaces removes rows for the season whose api_race_id is no longer
+// in the upstream calendar, returning how many were deleted.
+//
+// Without this, a calendar that shrinks (a race dropped, or rounds renumbered
+// downwards) strands the trailing rounds forever: they keep the old name and
+// date and show up as phantom duplicates in the app.
+//
+// Races that already carry a prediction, an official result or a score are left
+// alone. Those tables have no ON DELETE CASCADE, so deleting one would fail the
+// whole sync on a foreign key violation — and a race someone has staked picks on
+// should never disappear silently anyway. Such a row is reported by the caller
+// instead so it can be reconciled by hand.
+func (r *RaceRepository) DeleteStaleRaces(ctx context.Context, season int, keepAPIRaceIDs []string) (int, error) {
+	query := `
+		DELETE FROM races
+		WHERE season = $1
+		  AND NOT (api_race_id = ANY($2))
+		  AND NOT EXISTS (SELECT 1 FROM predictions p WHERE p.race_id = races.id)
+		  AND NOT EXISTS (SELECT 1 FROM race_results rr WHERE rr.race_id = races.id)
+		  AND NOT EXISTS (SELECT 1 FROM race_scores rs WHERE rs.race_id = races.id)
+	`
+	tag, err := r.db.Exec(ctx, query, season, keepAPIRaceIDs)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// ListStaleRaces returns races for the season that are absent from the upstream
+// calendar but could not be removed because data hangs off them.
+func (r *RaceRepository) ListStaleRaces(ctx context.Context, season int, keepAPIRaceIDs []string) ([]domain.Race, error) {
+	query := `SELECT ` + raceColumns + ` FROM races
+		WHERE season = $1 AND NOT (api_race_id = ANY($2))
+		ORDER BY race_time ASC`
+	rows, err := r.db.Query(ctx, query, season, keepAPIRaceIDs)
 	if err != nil {
 		return nil, err
 	}

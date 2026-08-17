@@ -63,12 +63,39 @@ func (s *AdminService) SyncSchedule(ctx context.Context, season int) (int, error
 	if err != nil {
 		return 0, fmt.Errorf("fetch schedule: %w", err)
 	}
+	// Refuse to treat an empty upstream response as "the season has no races".
+	// The sync deletes rows that are absent from the payload, so without this a
+	// single bad response would clear the whole calendar.
+	if len(races) == 0 {
+		return 0, errors.New("upstream returned no races; refusing to sync an empty calendar")
+	}
+
+	keep := make([]string, 0, len(races))
 	for i := range races {
 		if err := s.raceRepo.UpsertRace(ctx, &races[i]); err != nil {
 			return 0, fmt.Errorf("upsert race %s: %w", races[i].GrandPrix, err)
 		}
+		keep = append(keep, races[i].APIRaceID)
 	}
-	log.Printf("[admin] synced %d races for season %d", len(races), season)
+
+	// Drop rounds that no longer exist upstream. Anything the delete skipped is
+	// holding predictions or results, so name it in the log rather than leaving a
+	// phantom race in the calendar with nothing explaining it.
+	stale, err := s.raceRepo.ListStaleRaces(ctx, season, keep)
+	if err != nil {
+		return 0, fmt.Errorf("list stale races: %w", err)
+	}
+	removed, err := s.raceRepo.DeleteStaleRaces(ctx, season, keep)
+	if err != nil {
+		return 0, fmt.Errorf("delete stale races: %w", err)
+	}
+	if kept := len(stale) - removed; kept > 0 {
+		for _, r := range stale {
+			log.Printf("[admin] stale race %q (%s) kept: it has predictions or results attached", r.GrandPrix, r.APIRaceID)
+		}
+	}
+
+	log.Printf("[admin] synced %d races for season %d (%d stale removed)", len(races), season, removed)
 	return len(races), nil
 }
 

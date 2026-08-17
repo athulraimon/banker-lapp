@@ -116,7 +116,10 @@ func main() {
 	driverHandler.RegisterRoutes(e, authMiddleware)
 
 	// Start Scheduler
-	cronScheduler := scheduler.NewScheduler(refreshRepo)
+	cronScheduler := scheduler.NewScheduler(refreshRepo, func(ctx context.Context) error {
+		_, err := adminService.SyncSchedule(ctx, cfg.DefaultSeason)
+		return err
+	})
 	cronScheduler.Start()
 	defer cronScheduler.Stop()
 
