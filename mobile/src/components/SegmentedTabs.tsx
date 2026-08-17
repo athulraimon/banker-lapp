@@ -101,5 +101,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1,
     textTransform: 'uppercase',
+    // Jost needs an 18px line box at 12px and leaves no slack of its own, so
+    // the descenders get clipped wherever the row height is tight. Stated here
+    // rather than inherited for the same reason as the bottom tab labels.
+    lineHeight: 18,
   },
 });

@@ -10,7 +10,10 @@
 //   - static assets -> stale-while-revalidate
 //   - everything else (API, Google) -> straight to the network, untouched
 
-const VERSION = 'v1';
+// Bump this whenever the icons or splash art change. /icons/ is cached
+// stale-while-revalidate, so without a bump an installed client keeps painting
+// the previous mark until each file happens to revalidate.
+const VERSION = 'v2';
 const SHELL_CACHE = `banker-lapp-shell-${VERSION}`;
 const ASSET_CACHE = `banker-lapp-assets-${VERSION}`;
 const SHELL_URL = '/';

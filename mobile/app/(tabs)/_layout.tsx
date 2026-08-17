@@ -16,7 +16,18 @@ export default function TabLayout() {
         },
         tabBarActiveTintColor: colors.brass,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: { fontFamily: 'Jost-SemiBold', letterSpacing: 0.5 },
+        // Jost is a geometric sans with an unusually tall em box: at 11px it
+        // needs a full 16px line box (12 ascent + 4 descent) and leaves no
+        // slack, so the default label height shaved the tail off the 'g' in
+        // "Standings". Stating both numbers reserves the room explicitly
+        // instead of trusting whatever the tab bar reserves by default.
+        tabBarLabelStyle: {
+          fontFamily: 'Jost-SemiBold',
+          letterSpacing: 0.5,
+          fontSize: 11,
+          lineHeight: 16,
+        },
+        tabBarIconStyle: { marginBottom: -2 },
         sceneStyle: { backgroundColor: colors.bgCarbon },
       }}
     >

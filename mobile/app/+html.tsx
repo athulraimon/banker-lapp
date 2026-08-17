@@ -23,7 +23,7 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="description" content="Formula 1 Private Predictions Championship" />
 
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0b0c10" />
+        <meta name="theme-color" content="#0d0c09" />
 
         {/* iOS ignores the web manifest's display mode. These three tags are
             what actually make "Add to Home Screen" launch without Safari's
@@ -40,8 +40,19 @@ export default function Root({ children }: PropsWithChildren) {
 
         <style dangerouslySetInnerHTML={{ __html: baseStyle }} />
         <script dangerouslySetInnerHTML={{ __html: registerServiceWorker }} />
+        <script dangerouslySetInnerHTML={{ __html: dismissSplash }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* Launch screen for the gap between the page painting and the JS bundle
+            running. Without it the app shows flat carbon for as long as the
+            bundle takes to parse, which on a cold mobile load reads as a hang.
+            It is the same artwork PixelCarLoader draws, so when React takes over
+            the picture does not change — only who is animating it. */}
+        <div id="bl-splash" aria-hidden="true">
+          <img src="/icons/loading-car.gif" alt="" width={224} height={68} />
+        </div>
+        {children}
+      </body>
     </html>
   );
 }
@@ -50,7 +61,7 @@ export default function Root({ children }: PropsWithChildren) {
 // the page loading and the first render — very visible on a dark app.
 const baseStyle = `
 html, body, #root {
-  background-color: #0b0c10;
+  background-color: #0d0c09;
   height: 100%;
 }
 body {
@@ -58,6 +69,49 @@ body {
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
+#bl-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #0d0c09;
+  transition: opacity 260ms ease-out;
+}
+#bl-splash img {
+  /* Nearest-neighbour scaling: smoothing pixel art is the one thing that
+     destroys it, and browsers smooth by default. */
+  image-rendering: pixelated;
+  width: 224px;
+  height: 68px;
+}
+#bl-splash.bl-done { opacity: 0; pointer-events: none; }
+`;
+
+// Clears the launch screen as soon as React has rendered anything into #root.
+// The timeout is a backstop: if the bundle fails to boot, the user should end up
+// looking at whatever error the page can show, not at a car driving forever.
+const dismissSplash = `
+document.addEventListener('DOMContentLoaded', function () {
+  var splash = document.getElementById('bl-splash');
+  var root = document.getElementById('root');
+  if (!splash) return;
+  var removed = false;
+  function done() {
+    if (removed) return;
+    removed = true;
+    splash.classList.add('bl-done');
+    setTimeout(function () { splash.remove(); }, 300);
+  }
+  if (!root) return done();
+  if (root.childElementCount > 0) return done();
+  var observer = new MutationObserver(function () {
+    if (root.childElementCount > 0) { observer.disconnect(); done(); }
+  });
+  observer.observe(root, { childList: true });
+  setTimeout(done, 8000);
+});
 `;
 
 const registerServiceWorker = `

@@ -12,6 +12,8 @@ import { StatusBar } from 'expo-status-bar';
 import { colors } from '../src/theme/colors';
 import { DialogHost } from '../src/components/AppDialog';
 import { AppShell } from '../src/components/AppShell';
+import PixelCarLoader from '../src/components/PixelCarLoader';
+import InstallPrompt from '../src/components/InstallPrompt';
 
 const queryClient = new QueryClient();
 
@@ -98,10 +100,17 @@ export default function RootLayout() {
     }
   }, [isAuthenticated, accessToken, segments, ready]);
 
-  // Deliberately a coloured view, not null. Returning null renders a white page
-  // that is indistinguishable from a crash; this at least shows the app booted.
+  // Deliberately not null, and no longer a bare coloured view either. Returning
+  // null renders a white page indistinguishable from a crash; an empty carbon
+  // view is better but still reads as a hang. The pixel car spins here while
+  // fonts and the stored session resolve, which is usually well under a second
+  // but is the first thing anyone sees.
   if (!ready) {
-    return <View style={fallback.booting} />;
+    return (
+      <View style={fallback.booting}>
+        <PixelCarLoader cell={4} label="Formation lap" />
+      </View>
+    );
   }
 
   return (
@@ -113,13 +122,14 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         </Stack>
         <DialogHost />
+        <InstallPrompt />
       </AppShell>
     </QueryClientProvider>
   );
 }
 
 const fallback = StyleSheet.create({
-  booting: { flex: 1, backgroundColor: colors.bgCarbon },
+  booting: { flex: 1, backgroundColor: colors.bgCarbon, alignItems: 'center', justifyContent: 'center' },
   page: { flex: 1, backgroundColor: colors.bgCarbon },
   content: { padding: 24, paddingTop: 64 },
   title: { color: colors.f1Red, fontSize: 18, fontWeight: '700', marginBottom: 12 },
