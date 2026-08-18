@@ -1,10 +1,12 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl, Animated } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { colors } from '../../src/theme/colors';
 import { standingsApi, Standing, DriverStanding } from '../../src/api/standings';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import FadeInView from '../../src/components/anim/FadeInView';
+import PressableScale from '../../src/components/anim/PressableScale';
 import SegmentedTabs from '../../src/components/SegmentedTabs';
 import SwipeViews from '../../src/components/SwipeViews';
 import { Skeleton } from '../../src/components/Skeleton';
@@ -22,6 +24,7 @@ export default function StandingsScreen() {
   const [driversLoaded, setDriversLoaded] = useState(false);
   const [view, setView] = useState<View2>('players');
   const { user } = useAuthStore();
+  const router = useRouter();
   const progress = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(() => {
@@ -54,7 +57,13 @@ export default function StandingsScreen() {
     const gap = leaderPoints - item.total_points;
     return (
       <FadeInView delay={staggerDelay(index)} offsetY={8}>
-        <View style={[styles.row, isYou && styles.rowYou]}>
+        <PressableScale
+          style={[styles.row, isYou && styles.rowYou]}
+          scaleTo={0.985}
+          onPress={() => router.push(`/player/${item.user_id}`)}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.user_name}, position ${item.rank}. View their season.`}
+        >
           <View style={[styles.plate, isLeader ? styles.plateLeader : isYou ? styles.plateYou : styles.plateDefault]}>
             <Text style={[styles.plateText, isLeader && { color: colors.heroBottom }]}>{pad(item.rank)}</Text>
           </View>
@@ -66,7 +75,8 @@ export default function StandingsScreen() {
             <Text style={[styles.pts, { color: isYou ? colors.brass : colors.textPrimary }]}>{item.total_points}</Text>
             <Text style={styles.gap}>{isLeader ? 'leader' : `−${gap}`}</Text>
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />
+        </PressableScale>
       </FadeInView>
     );
   };
@@ -135,7 +145,7 @@ export default function StandingsScreen() {
           : <Text style={styles.emptyText}>No standings yet.</Text>
       }
       ListFooterComponent={
-        standings.length ? <Text style={styles.footnote}>Pull to refresh re-scores from the server. Your row stays highlighted wherever you sit.</Text> : null
+        standings.length ? <Text style={styles.footnote}>Tap a player to see their season and every call they made. Pull to refresh re-scores from the server.</Text> : null
       }
     />
   );

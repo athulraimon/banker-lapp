@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"banker_lapp_backend/internal/domain"
 
@@ -36,7 +37,7 @@ func (r *ScoreRepository) DeleteRaceScores(ctx context.Context, raceID string) e
 }
 
 func (r *ScoreRepository) GetGlobalStandings(ctx context.Context) ([]domain.Standing, error) {
-	// Calculate global standings using a join on users and grouping by user, 
+	// Calculate global standings using a join on users and grouping by user,
 	// sorting by points (desc) -> correct_winners (desc) -> poles (desc)
 	query := `
 		SELECT 
@@ -95,4 +96,77 @@ func (r *ScoreRepository) GetRaceScores(ctx context.Context, raceID string) ([]d
 		scores = append(scores, s)
 	}
 	return scores, nil
+}
+
+// GetPlayerCompletedRaces returns every race the player entered a prediction for
+// that has since finished, newest first, with the official result attached where
+// one has been entered.
+//
+// The result join is a LEFT JOIN on purpose. A race can be over while an admin
+// has not yet entered the podium, and those rows still belong in the history —
+// gating on race_results made them vanish, which reads as though the player never
+// entered. The Resulted flag lets the caller label them instead.
+//
+// finishedBefore is the privacy boundary: predictions for a race that has not
+// finished are still live, so the caller passes now-RaceDuration and this query
+// can never return them. It is a parameter rather than an interval literal in the
+// SQL so the cutoff keeps exactly one definition, domain.RaceDuration, shared
+// with the dashboard's notion of a finished weekend.
+//
+// Round is not a column on races - the app derives it by ordering a season by
+// race time - so it is computed the same way here, windowed over the whole season
+// rather than only the races this player entered.
+func (r *ScoreRepository) GetPlayerCompletedRaces(ctx context.Context, userID string, finishedBefore time.Time) ([]domain.PlayerRaceEntry, error) {
+	query := `
+		WITH rounds AS (
+			SELECT id, season, grand_prix, country, race_time,
+			       ROW_NUMBER() OVER (PARTITION BY season ORDER BY race_time) AS round
+			FROM races
+		)
+		SELECT rd.id, rd.round, rd.grand_prix, rd.country, rd.race_time, rd.season,
+		       p.pole_driver_id, p.p1_driver_id, p.p2_driver_id, p.p3_driver_id,
+		       rr.race_id IS NOT NULL AS resulted,
+		       COALESCE(rr.pole_driver_id, ''), COALESCE(rr.p1_driver_id, ''),
+		       COALESCE(rr.p2_driver_id, ''), COALESCE(rr.p3_driver_id, '')
+		FROM predictions p
+		JOIN rounds rd ON rd.id = p.race_id
+		LEFT JOIN race_results rr ON rr.race_id = p.race_id
+		WHERE p.user_id = $1 AND rd.race_time < $2
+		ORDER BY rd.race_time DESC
+	`
+	rows, err := r.db.Query(ctx, query, userID, finishedBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := make([]domain.PlayerRaceEntry, 0)
+	for rows.Next() {
+		var e domain.PlayerRaceEntry
+		var pred domain.Prediction
+		var res domain.RaceResult
+		if err := rows.Scan(
+			&e.RaceID, &e.Round, &e.GrandPrix, &e.Country, &e.RaceTime, &e.Season,
+			&pred.PoleDriverID, &pred.P1DriverID, &pred.P2DriverID, &pred.P3DriverID,
+			&e.Resulted, &res.PoleDriverID, &res.P1DriverID, &res.P2DriverID, &res.P3DriverID,
+		); err != nil {
+			return nil, err
+		}
+
+		if e.Resulted {
+			// Recomputed rather than read from race_scores so a row's per-slot
+			// points always add up to its total, even if the stored score is stale.
+			e.Breakdown = domain.ScorePrediction(&pred, &res)
+		} else {
+			// Nothing to measure against yet, but the picks are worth showing.
+			e.Breakdown = domain.PredictionBreakdown{
+				Pole: domain.SlotComparison{Predicted: pred.PoleDriverID},
+				P1:   domain.SlotComparison{Predicted: pred.P1DriverID},
+				P2:   domain.SlotComparison{Predicted: pred.P2DriverID},
+				P3:   domain.SlotComparison{Predicted: pred.P3DriverID},
+			}
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }
