@@ -252,3 +252,43 @@ func validateDistinctDrivers(p *domain.Prediction) error {
 	}
 	return nil
 }
+
+// ErrCannotDeleteSelf is returned when an admin aims the account-removal tool at
+// their own account. Deleting yourself from a list you are standing in would
+// invalidate the session mid-action; the Profile tab does it properly, clearing
+// the local session and routing to login.
+var ErrCannotDeleteSelf = errors.New("use your profile to delete your own account")
+
+// ListAccounts returns every registered player for the admin panel.
+func (s *AdminService) ListAccounts(ctx context.Context) ([]domain.AdminAccount, error) {
+	return s.userRepo.ListAccounts(ctx)
+}
+
+// DeleteAccount removes another player and everything belonging to them.
+//
+// Irreversible, and it moves the standings: the deleted player's points leave the
+// championship with them.
+//
+// Deleting a fellow admin is allowed. It is recoverable — admin rights come from
+// the ADMIN_EMAILS allowlist and are re-derived on every login, so the account
+// comes back with its admin flag intact the next time they sign in. Their
+// prediction history does not, which is why the UI names what is lost first.
+func (s *AdminService) DeleteAccount(ctx context.Context, actingAdminID, targetUserID string) error {
+	if actingAdminID == targetUserID {
+		return ErrCannotDeleteSelf
+	}
+
+	target, err := s.userRepo.GetUserByID(ctx, targetUserID)
+	if err != nil {
+		return err
+	}
+	if target == nil {
+		return errors.New("user not found")
+	}
+
+	if err := s.userRepo.DeleteUser(ctx, targetUserID); err != nil {
+		return err
+	}
+	log.Printf("[admin] account %s (%s) deleted by admin %s", targetUserID, target.Email, actingAdminID)
+	return nil
+}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -128,6 +129,46 @@ func (h *AdminHandler) UpsertPrediction(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"message": "prediction updated"})
 }
 
+// ListAccounts returns every registered player for the admin panel.
+func (h *AdminHandler) ListAccounts(c echo.Context) error {
+	log.Printf("Handling %s %s", c.Request().Method, c.Request().URL.Path)
+	accounts, err := h.adminService.ListAccounts(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list accounts"})
+	}
+	return c.JSON(http.StatusOK, accounts)
+}
+
+// DeleteAccount removes another player and their whole history.
+//
+// The acting admin's own id comes from their token, never from the request, so
+// the self-deletion guard cannot be sidestepped by passing somebody else's id.
+func (h *AdminHandler) DeleteAccount(c echo.Context) error {
+	log.Printf("Handling %s %s", c.Request().Method, c.Request().URL.Path)
+	actingAdminID, ok := c.Get("user_id").(string)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
+	targetID := c.Param("userId")
+	if targetID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "missing user id"})
+	}
+
+	err := h.adminService.DeleteAccount(c.Request().Context(), actingAdminID, targetID)
+	switch {
+	case err == nil:
+		return c.JSON(http.StatusOK, map[string]string{"message": "account deleted"})
+	case errors.Is(err, service.ErrCannotDeleteSelf):
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	case err.Error() == "user not found":
+		return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+	default:
+		log.Printf("[admin] account deletion failed for %s: %v", targetID, err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to delete account"})
+	}
+}
+
 func (h *AdminHandler) RegisterRoutes(e *echo.Echo, authMiddleware echo.MiddlewareFunc) {
 	adminGroup := e.Group("/admin", authMiddleware, middleware.AdminMiddleware)
 	adminGroup.POST("/schedule/sync", h.SyncSchedule)
@@ -136,4 +177,6 @@ func (h *AdminHandler) RegisterRoutes(e *echo.Echo, authMiddleware echo.Middlewa
 	adminGroup.POST("/races/:id/recalculate", h.RecalculateScores)
 	adminGroup.GET("/races/:id/predictions", h.ListPredictions)
 	adminGroup.PUT("/races/:id/users/:userId/prediction", h.UpsertPrediction)
+	adminGroup.GET("/users", h.ListAccounts)
+	adminGroup.DELETE("/users/:userId", h.DeleteAccount)
 }

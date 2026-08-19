@@ -179,3 +179,36 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userID string) error {
 
 	return tx.Commit(ctx)
 }
+
+// ListAccounts returns every registered player with the size of their history,
+// newest first.
+//
+// The two counts are correlated subqueries rather than joins with a GROUP BY: a
+// player with predictions but no scores (or the reverse) would otherwise be
+// dropped or double-counted, and this table is small enough that the shape
+// matters more than the plan.
+func (r *UserRepository) ListAccounts(ctx context.Context) ([]domain.AdminAccount, error) {
+	query := `
+		SELECT u.id, u.display_name, u.email, u.is_admin, u.created_at,
+		       (SELECT COUNT(*) FROM predictions p WHERE p.user_id = u.id),
+		       COALESCE((SELECT SUM(s.points) FROM race_scores s WHERE s.user_id = u.id), 0)
+		FROM users u
+		ORDER BY u.created_at DESC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	accounts := make([]domain.AdminAccount, 0)
+	for rows.Next() {
+		var a domain.AdminAccount
+		if err := rows.Scan(&a.UserID, &a.DisplayName, &a.Email, &a.IsAdmin,
+			&a.CreatedAt, &a.Predictions, &a.TotalPoints); err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, a)
+	}
+	return accounts, rows.Err()
+}

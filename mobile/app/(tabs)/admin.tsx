@@ -5,7 +5,7 @@ import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import { racesApi, Race } from '../../src/api/races';
-import { adminApi, AdminPredictionView, ResultInput } from '../../src/api/admin';
+import { adminApi, AdminAccount, AdminPredictionView, ResultInput } from '../../src/api/admin';
 import { useDrivers } from '../../src/hooks/useDrivers';
 import ResultPickerModal from '../../src/components/ResultPickerModal';
 
@@ -24,6 +24,8 @@ export default function AdminScreen() {
   const [predictions, setPredictions] = useState<AdminPredictionView[]>([]);
   const [predLoading, setPredLoading] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
+  const [accounts, setAccounts] = useState<AdminAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
 
   const loadRaces = useCallback(() => {
     setLoading(true);
@@ -34,9 +36,21 @@ export default function AdminScreen() {
       .finally(() => setLoading(false));
   }, []);
 
+  const loadAccounts = useCallback(() => {
+    setAccountsLoading(true);
+    adminApi
+      .listAccounts()
+      .then(setAccounts)
+      .catch((e) => showAlert('Error', e.response?.data?.error || 'Failed to load accounts'))
+      .finally(() => setAccountsLoading(false));
+  }, []);
+
   useEffect(() => {
-    if (user?.is_admin) loadRaces();
-  }, [user, loadRaces]);
+    if (user?.is_admin) {
+      loadRaces();
+      loadAccounts();
+    }
+  }, [user, loadRaces, loadAccounts]);
 
   if (!user?.is_admin) {
     return (
@@ -54,7 +68,7 @@ export default function AdminScreen() {
     try {
       setBusy(true);
       const res = await adminApi.syncSchedule(2026);
-      showAlert('Schedule synced', `${res.races} races loaded from OpenF1.`);
+      showAlert('Schedule synced', `${res.races} races loaded from Jolpica.`);
       loadRaces();
     } catch (e: any) {
       showAlert('Error', e.response?.data?.error || 'Failed to sync schedule');
@@ -162,6 +176,44 @@ export default function AdminScreen() {
     }
   };
 
+  // Two steps, and the message names the player and what goes with them. This
+  // also moves the championship: their points leave it when they do.
+  const confirmDeleteAccount = (account: AdminAccount) => {
+    showAlert(
+      'Delete ' + account.display_name + '?',
+      'Removes their account, ' +
+        account.predictions +
+        (account.predictions === 1 ? ' prediction' : ' predictions') +
+        ' and ' +
+        account.total_points +
+        ' championship points. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => performDeleteAccount(account),
+        },
+      ]
+    );
+  };
+
+  const performDeleteAccount = async (account: AdminAccount) => {
+    try {
+      setBusy(true);
+      await adminApi.deleteAccount(account.user_id);
+      showAlert('Account deleted', account.display_name + ' has been removed.');
+      loadAccounts();
+      // Their points are gone from the championship, so anything derived from
+      // scores is now stale.
+      loadRaces();
+    } catch (e: any) {
+      showAlert('Error', e.response?.data?.error || 'Failed to delete account');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const fmtPred = (p: AdminPredictionView['prediction']) => {
     if (!p) return 'No prediction';
     const name = (id: string) => driversById[id]?.driver_id || id || '—';
@@ -174,12 +226,21 @@ export default function AdminScreen() {
       <Text style={styles.caption}>Signed in as {user.email}</Text>
 
       <TouchableOpacity style={[styles.syncBtn, busy && { opacity: 0.5 }]} onPress={handleSync} disabled={busy}>
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.syncBtnText}>⟳ Sync F1 Schedule (OpenF1)</Text>}
+        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.syncBtnText}>⟳ Sync F1 Schedule (Jolpica)</Text>}
       </TouchableOpacity>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={loadRaces} tintColor={colors.f1Red} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading || accountsLoading}
+            onRefresh={() => {
+              loadRaces();
+              loadAccounts();
+            }}
+            tintColor={colors.f1Red}
+          />
+        }
       >
         <View style={styles.section}>
           <Text style={typography.sectionHeaderCompact}>Race Management</Text>
@@ -250,6 +311,56 @@ export default function AdminScreen() {
           )}
         </View>
 
+        <View style={styles.section}>
+          <Text style={typography.sectionHeaderCompact}>Accounts</Text>
+          <Text style={styles.sectionNote}>
+            Removing an account deletes its predictions and takes its points out of the
+            championship. There is no undo.
+          </Text>
+          {accountsLoading && accounts.length === 0 ? (
+            <ActivityIndicator color={colors.f1Red} style={{ marginVertical: 12 }} />
+          ) : accounts.length === 0 ? (
+            <Text style={styles.emptyText}>No registered players yet.</Text>
+          ) : (
+            accounts.map((account) => {
+              const isSelf = account.user_id === user.id;
+              return (
+                <View key={account.user_id} style={styles.acctRow}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={styles.acctNameRow}>
+                      <Text style={styles.acctName} numberOfLines={1}>
+                        {account.display_name}
+                      </Text>
+                      {account.is_admin && <Text style={styles.acctBadge}>Admin</Text>}
+                    </View>
+                    <Text style={styles.acctEmail} numberOfLines={1}>
+                      {account.email}
+                    </Text>
+                    <Text style={styles.acctStats}>
+                      {account.predictions}{' '}
+                      {account.predictions === 1 ? 'prediction' : 'predictions'} ·{' '}
+                      {account.total_points} pts
+                    </Text>
+                  </View>
+                  {isSelf ? (
+                    // The server refuses this anyway; saying why is friendlier than a
+                    // button that always errors.
+                    <Text style={styles.acctSelf}>You</Text>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.acctDeleteBtn, busy && { opacity: 0.5 }]}
+                      onPress={() => confirmDeleteAccount(account)}
+                      disabled={busy}
+                    >
+                      <Text style={styles.acctDeleteBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </View>
+
         <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
           <Text style={styles.logoutBtnText}>Logout</Text>
         </TouchableOpacity>
@@ -280,6 +391,88 @@ export default function AdminScreen() {
 }
 
 const styles = StyleSheet.create({
+  sectionNote: {
+    fontFamily: 'Karla-Regular',
+    fontSize: 11.5,
+    lineHeight: 17,
+    color: colors.textMuted,
+    marginBottom: 10,
+  },
+  acctRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.borderColor,
+    borderRadius: 10,
+    backgroundColor: colors.bgCard,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  acctNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  acctName: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textPrimary,
+    flexShrink: 1,
+  },
+  acctBadge: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 8.5,
+    lineHeight: 12,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: colors.brass,
+    borderWidth: 1,
+    borderColor: 'rgba(201,162,39,0.45)',
+    borderRadius: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  acctEmail: {
+    fontFamily: 'Karla-Regular',
+    fontSize: 11,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  acctStats: {
+    fontFamily: 'Karla-Regular',
+    fontSize: 10.5,
+    lineHeight: 15,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  acctSelf: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+    flexShrink: 0,
+  },
+  acctDeleteBtn: {
+    borderWidth: 1,
+    borderColor: 'rgba(168,41,28,0.6)',
+    backgroundColor: 'rgba(168,41,28,0.10)',
+    borderRadius: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 13,
+    flexShrink: 0,
+  },
+  acctDeleteBtnText: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: colors.redText,
+  },
   container: { flex: 1, padding: 16, paddingTop: 48, backgroundColor: colors.bgCarbon },
   caption: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
   syncBtn: { backgroundColor: colors.f1Red, borderRadius: 8, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
