@@ -22,5 +22,16 @@ export const authApi = {
   
   logout: async (): Promise<void> => {
     await apiClient.post('/auth/logout');
-  }
+  },
+
+  // Both of these are scoped to the caller's token — there is no user id to pass,
+  // so one player can never rename or delete another.
+  updateDisplayName: async (displayName: string): Promise<User> => {
+    const response = await apiClient.patch<User>('/auth/me', { display_name: displayName });
+    return response.data;
+  },
+
+  deleteAccount: async (): Promise<void> => {
+    await apiClient.delete('/auth/me');
+  },
 };

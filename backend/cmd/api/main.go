@@ -67,7 +67,8 @@ func main() {
 	// not listed here fails the preflight and the request never reaches a route.
 	e.Use(echomw.CORSWithConfig(echomw.CORSConfig{
 		AllowOrigins: cfg.AllowedOrigins,
-		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch,
+			http.MethodDelete, http.MethodOptions},
 		AllowHeaders: []string{
 			echo.HeaderOrigin,
 			echo.HeaderContentType,

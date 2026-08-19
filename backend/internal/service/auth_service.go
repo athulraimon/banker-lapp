@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
 	"banker_lapp_backend/internal/config"
@@ -175,4 +176,57 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshTokenString strin
 
 func (s *AuthService) Logout(ctx context.Context, userID string) error {
 	return s.tokens.Delete(ctx, userID)
+}
+
+// Display name bounds. The name appears on the leaderboard and in race
+// breakdowns, so it has to fit a narrow phone row; 32 characters is what the
+// standings row can show before it truncates.
+const (
+	DisplayNameMinLen = 2
+	DisplayNameMaxLen = 32
+)
+
+// ErrInvalidDisplayName is returned for a name that fails validation, so the
+// handler can answer 400 rather than 500.
+var ErrInvalidDisplayName = errors.New("display name must be between 2 and 32 characters")
+
+// validateDisplayName trims and bounds-checks a name, returning the value to
+// store. Split out from the method so it is testable without a database.
+func validateDisplayName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if n := len([]rune(name)); n < DisplayNameMinLen || n > DisplayNameMaxLen {
+		return "", ErrInvalidDisplayName
+	}
+	return name, nil
+}
+
+// UpdateDisplayName renames the signed-in player.
+//
+// The name is trimmed first: leading or trailing spaces are invisible on the
+// leaderboard but make two players look identical, and " " would otherwise pass a
+// naive non-empty check. Counted in runes, not bytes, so a name in a non-Latin
+// script is not rejected for being "too long" when it is not.
+func (s *AuthService) UpdateDisplayName(ctx context.Context, userID, displayName string) (*domain.User, error) {
+	name, err := validateDisplayName(displayName)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.repo.UpdateDisplayName(ctx, userID, name)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil // nil user means no such row; the handler turns that into 404
+}
+
+// DeleteAccount permanently removes the signed-in player and their history.
+//
+// The session is revoked first. If the delete then failed, the player is merely
+// signed out rather than left holding a working token for an account that is
+// half gone.
+func (s *AuthService) DeleteAccount(ctx context.Context, userID string) error {
+	if err := s.tokens.Delete(ctx, userID); err != nil {
+		return err
+	}
+	return s.repo.DeleteUser(ctx, userID)
 }

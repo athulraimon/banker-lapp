@@ -25,6 +25,10 @@ interface AuthState {
   // logged-in user to the login screen, which on web is a visible URL flash.
   hasHydrated: boolean;
   setAuthWithExpiry: (user: User, accessToken: string, refreshToken: string) => void;
+  // Replaces the cached user without touching the session. Renaming yourself does
+  // not change the token — it carries only the id and admin flag — so reissuing
+  // one would be pointless churn.
+  setUser: (user: User) => void;
   logout: () => void;
 }
 
@@ -57,6 +61,7 @@ export const useAuthStore = create<AuthState>()(
         const exp = payload?.exp ?? null;
         set({ user, accessToken, refreshToken, isAuthenticated: true, accessTokenExp: exp });
       },
+      setUser: (user) => set({ user }),
       logout: () => set({ 
         user: null, 
         accessToken: null, 

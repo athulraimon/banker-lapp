@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Animated } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import { racesApi, Race } from '../../src/api/races';
@@ -18,7 +17,7 @@ import { randomRadioLine } from '../../src/data/radioLines';
 const pad = (n: number) => String(Math.max(0, Math.floor(n))).padStart(2, '0');
 
 export default function DashboardScreen() {
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const router = useRouter();
   const [races, setRaces] = useState<Race[]>([]);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
@@ -152,9 +151,6 @@ export default function DashboardScreen() {
           <Text style={styles.eyebrow} numberOfLines={1}>Season 2026 · {user?.display_name || 'Driver'}</Text>
           <Text style={styles.greeting}>{radioLine}</Text>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout} hitSlop={8}>
-          <Ionicons name="log-out-outline" size={17} color={colors.textSecondary} />
-        </TouchableOpacity>
       </View>
 
       {showSkeleton ? (
@@ -292,15 +288,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginTop: 3,
     paddingRight: 8,
-  },
-  logoutBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: colors.borderColor,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   hero: {
