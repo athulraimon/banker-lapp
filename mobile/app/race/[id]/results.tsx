@@ -11,6 +11,7 @@ import SegmentedTabs from '../../../src/components/SegmentedTabs';
 import SwipeViews from '../../../src/components/SwipeViews';
 import RaceInfoPanel from '../../../src/components/RaceInfoPanel';
 import FadeInView from '../../../src/components/anim/FadeInView';
+import PressableScale from '../../../src/components/anim/PressableScale';
 import { staggerDelay } from '../../../src/theme/motion';
 
 type RaceTab = 'predictions' | 'info';
@@ -147,14 +148,21 @@ export default function RaceResultsScreen() {
               const isYou = score.user_id === prediction?.user_id;
               return (
                 <FadeInView key={score.user_id} delay={staggerDelay(index)} offsetY={8}>
-                  <View style={[styles.compRow, isYou && styles.compRowYou]}>
+                  <PressableScale
+                    style={[styles.compRow, isYou && styles.compRowYou]}
+                    scaleTo={0.985}
+                    onPress={() => router.push(`/player/${score.user_id}`)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${score.user_name}, ${score.points} points. View their season.`}
+                  >
                     <Text style={styles.compRank}>{String(index + 1).padStart(2, '0')}</Text>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={styles.compName} numberOfLines={1}>{score.user_name}{isYou ? ' (You)' : ''}</Text>
                       {renderCompetitorPicks(score.user_id)}
                     </View>
                     <Text style={styles.compPts}>{score.points}</Text>
-                  </View>
+                    <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />
+                  </PressableScale>
                 </FadeInView>
               );
             })

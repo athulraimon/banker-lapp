@@ -81,54 +81,77 @@ export default function ResultPickerModal({ visible, title, subtitle, initial, s
     setQuery('');
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={styles.sheet}>
-          <Text style={typography.h3}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+  const activeLabel = SLOTS.find((s) => s.key === activeSlot)?.label;
 
-          {activeSlot ? (
-            <View style={styles.pickerArea}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search driver…"
-                placeholderTextColor={colors.textMuted}
-                value={query}
-                onChangeText={setQuery}
-                autoCapitalize="characters"
-                autoFocus
-              />
-              <TouchableOpacity style={styles.noneItem} onPress={clearSlot}>
-                <Text style={styles.noneText}>✕  None (clear this position)</Text>
-              </TouchableOpacity>
-              {isLoading ? (
-                <ActivityIndicator color={colors.f1Red} style={{ marginTop: 20 }} />
-              ) : (
-                <FlatList
-                  data={filtered}
-                  keyExtractor={(d) => d.driver_id}
-                  keyboardShouldPersistTaps="handled"
-                  style={{ maxHeight: 260 }}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.driverItem} onPress={() => pick(item)}>
-                      <View style={[styles.stripe, { backgroundColor: `#${item.team_color || '888'}` }]} />
-                      <Text style={styles.driverText}>
-                        {item.driver_id} · {item.broadcast_name}
-                        <Text style={styles.teamText}> {item.team_name}</Text>
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                />
-              )}
-              <TouchableOpacity style={styles.linkBtn} onPress={() => setActiveSlot(null)}>
-                <Text style={styles.linkText}>Back</Text>
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={activeSlot ? () => setActiveSlot(null) : onCancel}
+    >
+      <KeyboardAvoidingView
+        style={activeSlot ? styles.pickerScreen : styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : activeSlot ? undefined : 'height'}
+      >
+        {activeSlot ? (
+          // Top-anchored, full-screen driver picker — the same shape as the
+          // search sheet the predictions screen uses, so the list stays put as
+          // filtering shortens it rather than collapsing toward the keyboard.
+          <>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Pick a driver{activeLabel ? ` · ${activeLabel}` : ''}</Text>
+              <TouchableOpacity onPress={() => setActiveSlot(null)} hitSlop={10}>
+                <Text style={styles.closeText}>Back</Text>
               </TouchableOpacity>
             </View>
-          ) : (
+
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search driver or code — VER, HAM…"
+              placeholderTextColor={colors.textMuted}
+              value={query}
+              onChangeText={setQuery}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoFocus
+              returnKeyType="search"
+            />
+
+            <TouchableOpacity style={styles.clearRow} onPress={clearSlot}>
+              <Text style={styles.clearText}>Clear this position</Text>
+            </TouchableOpacity>
+
+            {isLoading ? (
+              <View style={styles.center}>
+                <ActivityIndicator color={colors.brass} />
+                <Text style={styles.emptyText}>Loading grid…</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filtered}
+                keyExtractor={(d) => d.driver_id}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.row} onPress={() => pick(item)} activeOpacity={0.75}>
+                    <View style={[styles.stripe, { backgroundColor: `#${item.team_color || '888888'}` }]} />
+                    <Text style={styles.rowCode}>{item.driver_id}</Text>
+                    <Text style={styles.rowName} numberOfLines={1}>{item.broadcast_name}</Text>
+                    <Text style={styles.rowRight}>{item.team_name}</Text>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={<Text style={styles.emptyText}>No drivers match “{query}”.</Text>}
+              />
+            )}
+          </>
+        ) : (
+          <View style={styles.sheet}>
+            <Text style={typography.h3}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+
             <>
               {SLOTS.map((s) => {
                 const id = value[s.key];
@@ -158,8 +181,8 @@ export default function ResultPickerModal({ visible, title, subtitle, initial, s
                 </TouchableOpacity>
               </View>
             </>
-          )}
-        </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -176,23 +199,58 @@ const styles = StyleSheet.create({
     borderColor: colors.borderColor,
   },
   subtitle: { ...typography.caption, color: colors.textMuted, marginTop: 4, marginBottom: 12 },
-  pickerArea: { marginTop: 12 },
+
+  pickerScreen: { flex: 1, backgroundColor: colors.bgPhone, paddingHorizontal: 16, paddingTop: 54 },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 },
+  pickerTitle: { fontFamily: 'Jost-Bold', fontSize: 20, color: colors.textPrimary, flexShrink: 1 },
+  closeText: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+  },
   searchInput: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: colors.inputBg,
     borderWidth: 1,
     borderColor: colors.borderColor,
-    borderRadius: 6,
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     color: colors.textPrimary,
-    fontFamily: 'Outfit-Regular',
+    fontFamily: 'Karla-Regular',
+    fontSize: 14,
+    marginBottom: 10,
   },
-  noneItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', marginTop: 6 },
-  noneText: { fontFamily: 'SpaceGrotesk-Bold', fontSize: 13, color: colors.textSecondary },
-  driverItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
-  stripe: { width: 4, height: 18, borderRadius: 2 },
-  driverText: { ...typography.body, flexShrink: 1 },
-  teamText: { ...typography.caption, color: colors.textMuted },
+  clearRow: { paddingVertical: 12, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: colors.borderColor },
+  clearText: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 12.5,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+  },
+  // flex:1 pins the list to the space below the search field, so filtering
+  // leaves empty space at the bottom rather than collapsing the panel.
+  list: { flex: 1 },
+  listContent: { paddingBottom: 24 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 40, gap: 8 },
+  emptyText: { fontFamily: 'Karla-Regular', fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: 24 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 13,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderFaint,
+  },
+  stripe: { width: 4, height: 22, borderRadius: 2, flexShrink: 0 },
+  rowCode: { fontFamily: 'Jost-Bold', fontSize: 13, width: 42, color: colors.textPrimary },
+  rowName: { fontFamily: 'Karla-Regular', fontSize: 14, color: colors.textPrimary, flex: 1 },
+  rowRight: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.textMuted },
   slot: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -215,6 +273,4 @@ const styles = StyleSheet.create({
   btnGhostText: { fontFamily: 'SpaceGrotesk-Bold', color: colors.textSecondary },
   btnPrimary: { backgroundColor: colors.f1Red },
   btnPrimaryText: { fontFamily: 'SpaceGrotesk-Bold', color: '#fff' },
-  linkBtn: { paddingVertical: 12, alignItems: 'center' },
-  linkText: { fontFamily: 'SpaceGrotesk-Bold', color: colors.textSecondary },
 });

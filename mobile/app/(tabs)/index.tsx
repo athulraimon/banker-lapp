@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Animated } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import { racesApi, Race } from '../../src/api/races';
@@ -60,6 +61,11 @@ export default function DashboardScreen() {
   const activeRace = races.find(r => !isWeekendOver(r));
   const upcomingRaces = races.filter(r => !isWeekendOver(r) && r.id !== activeRace?.id);
   const completedRaces = races.filter(r => isWeekendOver(r));
+
+  // The most recently finished round, so the dashboard can offer a one-tap jump
+  // straight to how that weekend scored.
+  const previousRace = [...completedRaces]
+    .sort((a, b) => new Date(b.race_time).getTime() - new Date(a.race_time).getTime())[0];
 
   useFocusEffect(
     useCallback(() => {
@@ -170,6 +176,25 @@ export default function DashboardScreen() {
         </View>
       ) : (
         <>
+          {/* Shortcut to the last finished round's scores, sitting above the hero */}
+          {previousRace && (
+            <FadeInView style={{ paddingHorizontal: 18 }}>
+              <PressableScale
+                style={styles.prevBtn}
+                scaleTo={0.99}
+                onPress={() => router.push(`/race/${previousRace.id}/results`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Check the previous race score for the ${previousRace.grand_prix}`}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.prevEyebrow}>Check previous race score</Text>
+                  <Text style={styles.prevName} numberOfLines={1}>{previousRace.grand_prix}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              </PressableScale>
+            </FadeInView>
+          )}
+
           {/* Hero: active Grand Prix (pinned above the swipeable calendar) */}
           {activeRace && (
             <FadeInView style={{ paddingHorizontal: 18 }}>
@@ -289,6 +314,28 @@ const styles = StyleSheet.create({
     marginTop: 3,
     paddingRight: 8,
   },
+
+  prevBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 10,
+    backgroundColor: colors.bgCard,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  prevEyebrow: {
+    fontFamily: 'Jost-SemiBold',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: colors.brass,
+  },
+  prevName: { fontFamily: 'Jost-SemiBold', fontSize: 14, color: colors.textPrimary, marginTop: 3 },
 
   hero: {
     borderWidth: 1,
