@@ -14,6 +14,8 @@ import SwipeViews from '../../src/components/SwipeViews';
 import RaceInfoPanel from '../../src/components/RaceInfoPanel';
 import FadeInView from '../../src/components/anim/FadeInView';
 import { useDrivers } from '../../src/hooks/useDrivers';
+import { useAuthStore } from '../../src/store/useAuthStore';
+import { usePendingPredictionStore } from '../../src/store/usePendingPredictionStore';
 
 type RaceTab = 'predictions' | 'info';
 type Slot = 'pole' | 'p1' | 'p2' | 'p3';
@@ -22,6 +24,8 @@ export default function PredictionEditorScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { byId: driversById } = useDrivers();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { pending, setPending, clearPending } = usePendingPredictionStore();
   const [race, setRace] = useState<Race | null>(null);
   const [prediction, setPrediction] = useState<Prediction>({
     race_id: id as string,
@@ -45,11 +49,17 @@ export default function PredictionEditorScreen() {
           router.replace(`/race/${id}/results`);
         }
       }).catch(console.error);
-      predictionsApi.getPrediction(id as string).then(pred => {
-        if (pred) setPrediction(pred);
-      }).catch(console.error);
+      if (isAuthenticated) {
+        predictionsApi.getPrediction(id as string).then(pred => {
+          if (pred) setPrediction(pred);
+        }).catch(console.error);
+      } else if (pending && pending.race_id === id) {
+        // A guest who started picking, was asked to sign in and came back
+        // without doing so still has their slate.
+        setPrediction(pending);
+      }
     }
-  }, [id]);
+  }, [id, isAuthenticated]);
 
   const locked = race?.status === 'locked' || race?.status === 'completed';
 
@@ -62,8 +72,19 @@ export default function PredictionEditorScreen() {
 
   const handleSave = async () => {
     if (!canSave) return;
+
+    // Guests may fill the sheet in — picking is the part worth trying before you
+    // commit to an account. Only the save needs an identity to attach to, so the
+    // picks are stashed and submitted for them the moment they sign in.
+    if (!isAuthenticated) {
+      setPending(prediction);
+      router.push('/(auth)/login');
+      return;
+    }
+
     try {
       await predictionsApi.submitPrediction(prediction);
+      clearPending();
       setSaved(true);
     } catch (e: any) {
       showAlert('Error', e.response?.data?.error || 'Failed to save predictions');
@@ -118,7 +139,8 @@ export default function PredictionEditorScreen() {
     ? 'Picks saved ✓'
     : dupe ? 'Fix duplicate picks'
     : filledCount === 0 ? 'Pick at least one driver'
-    : 'Save picks';
+    : isAuthenticated ? 'Save picks'
+    : 'Sign in to save picks';
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -177,7 +199,9 @@ export default function PredictionEditorScreen() {
               )}
 
               <Text style={styles.note}>
-                Save any time — you don't need all four. Your pole pick can also be your P1. Edit as often as you like until Practice 1.
+                {isAuthenticated
+                  ? "Save any time — you don't need all four. Your pole pick can also be your P1. Edit as often as you like until Practice 1."
+                  : 'Pick freely as a guest. Signing in keeps this slate and enters it for the round — nothing is lost.'}
               </Text>
             </FadeInView>
           </ScrollView>

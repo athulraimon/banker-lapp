@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"log"
 
+	"banker_lapp_backend/internal/middleware"
 	"banker_lapp_backend/internal/service"
 
 	"github.com/labstack/echo/v4"
@@ -53,7 +54,7 @@ func (h *RaceHandler) GetRace(c echo.Context) error {
 func (h *RaceHandler) GetRaceResults(c echo.Context) error {
 	log.Printf("Handling %s %s", c.Request().Method, c.Request().URL.Path)
 	id := c.Param("id")
-	results, err := h.raceService.GetRaceResults(c.Request().Context(), id)
+	results, err := h.raceService.GetRaceResults(c.Request().Context(), id, middleware.IsSignedIn(c))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to fetch race results"})
 	}
@@ -61,9 +62,13 @@ func (h *RaceHandler) GetRaceResults(c echo.Context) error {
 	return c.JSON(http.StatusOK, results)
 }
 
-func (h *RaceHandler) RegisterRoutes(e *echo.Echo, authMiddleware echo.MiddlewareFunc) {
-	protected := e.Group("/races", authMiddleware)
-	protected.GET("", h.GetRaces)
-	protected.GET("/:id", h.GetRace)
-	protected.GET("/:id/results", h.GetRaceResults)
+// RegisterRoutes puts the calendar behind optional auth rather than no auth at
+// all. The schedule and the official podium are public F1 facts, so a guest can
+// browse them; /:id/results additionally returns who predicted what, and that
+// part is withheld unless the request carried a real session.
+func (h *RaceHandler) RegisterRoutes(e *echo.Echo, optionalAuth echo.MiddlewareFunc) {
+	public := e.Group("/races", optionalAuth)
+	public.GET("", h.GetRaces)
+	public.GET("/:id", h.GetRace)
+	public.GET("/:id/results", h.GetRaceResults)
 }

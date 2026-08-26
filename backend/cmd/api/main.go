@@ -107,14 +107,17 @@ func main() {
 
 	// Custom Middlewares
 	authMiddleware := middleware.AuthMiddleware(cfg)
+	// Guest mode: identifies the caller when a token is present, lets them
+	// through when it is not. See middleware.OptionalAuth.
+	optionalAuth := middleware.OptionalAuth(cfg)
 
 	// Register Routes
 	authHandler.RegisterRoutes(e, authMiddleware)
-	raceHandler.RegisterRoutes(e, authMiddleware)
+	raceHandler.RegisterRoutes(e, optionalAuth)
 	predHandler.RegisterRoutes(e, authMiddleware)
 	standingsHandler.RegisterRoutes(e, authMiddleware)
 	adminHandler.RegisterRoutes(e, authMiddleware)
-	driverHandler.RegisterRoutes(e, authMiddleware)
+	driverHandler.RegisterRoutes(e, optionalAuth)
 
 	// Start Scheduler
 	cronScheduler := scheduler.NewScheduler(refreshRepo, func(ctx context.Context) error {

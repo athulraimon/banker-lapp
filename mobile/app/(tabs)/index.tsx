@@ -18,7 +18,7 @@ import { randomRadioLine } from '../../src/data/radioLines';
 const pad = (n: number) => String(Math.max(0, Math.floor(n))).padStart(2, '0');
 
 export default function DashboardScreen() {
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, isGuest } = useAuthStore();
   const router = useRouter();
   const [races, setRaces] = useState<Race[]>([]);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
@@ -33,7 +33,10 @@ export default function DashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!isAuthenticated) {
+      // Guests get here too: the calendar is public F1 data, and a visitor who
+      // cannot see the season has nothing to look at. Only a visitor who is
+      // neither signed in nor browsing is sent back to the choice screen.
+      if (!isAuthenticated && !isGuest) {
         router.replace('/(auth)/login');
         return;
       }
@@ -44,7 +47,7 @@ export default function DashboardScreen() {
           router.replace('/(auth)/login');
         }
       }).finally(() => setLoading(false));
-    }, [isAuthenticated])
+    }, [isAuthenticated, isGuest])
   );
 
   const RACE_OVER_BUFFER_MS = (2 * 60 + 15) * 60 * 1000;
@@ -69,9 +72,11 @@ export default function DashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!activeRace) { setPrediction(null); return; }
+      // A guest has no prediction to fetch, and asking would be a guaranteed 401
+      // on every focus.
+      if (!activeRace || !isAuthenticated) { setPrediction(null); return; }
       predictionsApi.getPrediction(activeRace.id).then(setPrediction).catch(() => setPrediction(null));
-    }, [activeRace?.id])
+    }, [activeRace?.id, isAuthenticated])
   );
 
   const fp1 = activeRace ? new Date(activeRace.fp1_time).getTime() : 0;
@@ -95,7 +100,9 @@ export default function DashboardScreen() {
     ? (['pole_driver_id', 'p1_driver_id', 'p2_driver_id', 'p3_driver_id'] as const)
         .filter(k => prediction[k]).length
     : 0;
-  const heroCta = !isOpen
+  const heroCta = isGuest
+    ? (isOpen ? 'Try the prediction sheet' : 'View the race')
+    : !isOpen
     ? 'View your picks'
     : pickCount === 4 ? 'Review your picks' : pickCount > 0 ? 'Finish your picks' : 'Make your picks';
 
@@ -154,7 +161,9 @@ export default function DashboardScreen() {
       {/* Header */}
       <View style={styles.topBar}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow} numberOfLines={1}>Season 2026 · {user?.display_name || 'Driver'}</Text>
+          <Text style={styles.eyebrow} numberOfLines={1}>
+            Season 2026 · {isGuest ? 'Guest' : user?.display_name || 'Driver'}
+          </Text>
           <Text style={styles.greeting}>{radioLine}</Text>
         </View>
       </View>
@@ -235,12 +244,18 @@ export default function DashboardScreen() {
                       <Text style={styles.lockNote}>
                         Picks lock when Practice 1 starts · {new Date(activeRace.fp1_time).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
                       </Text>
-                      <View style={styles.progressRow}>
-                        <View style={styles.progressTrack}>
-                          <View style={[styles.progressFill, { width: `${(pickCount / 4) * 100}%` }]} />
+                      {isGuest ? (
+                        <Text style={styles.guestPrompt}>
+                          Sign in to enter this round and score points.
+                        </Text>
+                      ) : (
+                        <View style={styles.progressRow}>
+                          <View style={styles.progressTrack}>
+                            <View style={[styles.progressFill, { width: `${(pickCount / 4) * 100}%` }]} />
+                          </View>
+                          <Text style={styles.progressLabel}>{pickCount}/4 picked</Text>
                         </View>
-                        <Text style={styles.progressLabel}>{pickCount}/4 picked</Text>
-                      </View>
+                      )}
                     </>
                   ) : (
                     <Text style={[styles.lockNote, { marginTop: 12 }]}>
@@ -285,6 +300,12 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  guestPrompt: {
+    fontFamily: 'Karla-Regular',
+    fontSize: 12,
+    color: colors.brass,
+    marginTop: 14,
+  },
   container: {
     flex: 1,
     paddingTop: 54,

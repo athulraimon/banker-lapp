@@ -11,6 +11,7 @@ import {
 } from '../../src/api/standings';
 import { useAuthStore } from '../../src/store/useAuthStore';
 import LoadingScreen from '../../src/components/LoadingScreen';
+import SignInWall from '../../src/components/SignInWall';
 import StatCard from '../../src/components/StatCard';
 import CheckerStripe from '../../src/components/CheckerStripe';
 import FadeInView from '../../src/components/anim/FadeInView';
@@ -32,12 +33,12 @@ const SLOTS = [
 export default function PlayerProfileScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !isAuthenticated) return;
     setFailed(false);
     standingsApi
       .getPlayerProfile(id as string)
@@ -46,7 +47,21 @@ export default function PlayerProfileScreen() {
         console.error(err);
         setFailed(true);
       });
-  }, [id]);
+  }, [id, isAuthenticated]);
+
+  // Reachable by URL on the web build even though nothing links here for a
+  // guest, so the screen refuses on its own rather than trusting its callers.
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.container}>
+        <ProfileHeader onBack={() => router.back()} title="Player" />
+        <SignInWall
+          title="Members only"
+          message="Player seasons — every call they made, race by race — are part of the private championship."
+        />
+      </View>
+    );
+  }
 
   if (failed) {
     return (

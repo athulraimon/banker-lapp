@@ -13,6 +13,8 @@ import RaceInfoPanel from '../../../src/components/RaceInfoPanel';
 import FadeInView from '../../../src/components/anim/FadeInView';
 import PressableScale from '../../../src/components/anim/PressableScale';
 import { staggerDelay } from '../../../src/theme/motion';
+import { useAuthStore } from '../../../src/store/useAuthStore';
+import SignInWall from '../../../src/components/SignInWall';
 
 type RaceTab = 'predictions' | 'info';
 
@@ -23,15 +25,20 @@ export default function RaceResultsScreen() {
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResultWithPredictions | null>(null);
   const [tab, setTab] = useState<RaceTab>('predictions');
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (id) {
       racesApi.getRace(id as string).then(setRace).catch(console.error);
-      predictionsApi.getPrediction(id as string).then(setPrediction).catch(console.error);
+      // A guest has no prediction of their own, and the server sends them the
+      // official podium with everyone else's picks stripped out.
+      if (isAuthenticated) {
+        predictionsApi.getPrediction(id as string).then(setPrediction).catch(console.error);
+      }
       racesApi.getRaceResults(id as string).then(setRaceResults).catch(console.error);
     }
-  }, [id]);
+  }, [id, isAuthenticated]);
 
   if (!race) return <LoadingScreen label="Loading race…" />;
 
@@ -132,18 +139,47 @@ export default function RaceResultsScreen() {
               <View style={styles.summaryBody}>
                 <Text style={styles.summaryEyebrow}>{race.season} Season</Text>
                 <Text style={styles.summaryName}>{race.grand_prix}</Text>
-                <Text style={styles.summaryPoints}>+{userScore?.points || 0}</Text>
-                <Text style={styles.summaryCaption}>Points earned · {correctCount} of 4 correct</Text>
+                {isAuthenticated ? (
+                  <>
+                    <Text style={styles.summaryPoints}>+{userScore?.points || 0}</Text>
+                    <Text style={styles.summaryCaption}>Points earned · {correctCount} of 4 correct</Text>
+                  </>
+                ) : (
+                  <Text style={[styles.summaryCaption, { marginTop: 10 }]}>
+                    Official result · sign in to play this round
+                  </Text>
+                )}
               </View>
             </View>
           </FadeInView>
 
-          <Text style={styles.eyebrow}>Your picks vs the result</Text>
-          {slots.map(s => compareRow(s.label, predVal(s.key), actualVal(s.key)))}
+          {isAuthenticated ? (
+            <>
+              <Text style={styles.eyebrow}>Your picks vs the result</Text>
+              {slots.map(s => compareRow(s.label, predVal(s.key), actualVal(s.key)))}
+            </>
+          ) : (
+            <>
+              <Text style={styles.eyebrow}>Official result</Text>
+              {slots.map(s => (
+                <View key={s.label} style={styles.cmpRow}>
+                  <Text style={styles.cmpSlot}>{s.label}</Text>
+                  <Text style={styles.cmpActual} numberOfLines={1}>{actualVal(s.key) || '—'}</Text>
+                </View>
+              ))}
+            </>
+          )}
 
           <Text style={[styles.eyebrow, { marginTop: 22, marginBottom: 4 }]}>How everyone scored</Text>
-          <Text style={styles.picksHint}><Text style={{ color: colors.accentGreen }}>Green</Text> picks matched the official result.</Text>
-          {raceResults?.race_scores?.length ? (
+          {!isAuthenticated ? (
+            <View style={styles.lockedScores}>
+              <SignInWall
+                compact
+                title="Members only"
+                message="Everyone's picks and points for this race are part of the private championship."
+              />
+            </View>
+          ) : raceResults?.race_scores?.length ? (
             raceResults.race_scores.map((score, index) => {
               const isYou = score.user_id === prediction?.user_id;
               return (
@@ -170,6 +206,12 @@ export default function RaceResultsScreen() {
             <Text style={styles.note}>No scores yet — results haven’t been entered for this race.</Text>
           )}
 
+          {isAuthenticated && (
+            <Text style={styles.picksHint}>
+              <Text style={{ color: colors.accentGreen }}>Green</Text> picks matched the official result.
+            </Text>
+          )}
+
           <TouchableOpacity style={styles.viewBtn} onPress={() => router.push('/(tabs)/standings')} activeOpacity={0.85}>
             <Text style={styles.viewBtnText}>View championship</Text>
           </TouchableOpacity>
@@ -185,6 +227,9 @@ export default function RaceResultsScreen() {
 }
 
 const styles = StyleSheet.create({
+  // SignInWall centres itself in whatever height it is given; inside a
+  // ScrollView it needs one stated.
+  lockedScores: { height: 260, marginTop: 4 },
   container: { flex: 1, backgroundColor: colors.bgPhone },
   header: {
     flexDirection: 'row',

@@ -10,6 +10,7 @@ import PressableScale from '../../src/components/anim/PressableScale';
 import SegmentedTabs from '../../src/components/SegmentedTabs';
 import SwipeViews from '../../src/components/SwipeViews';
 import { Skeleton } from '../../src/components/Skeleton';
+import SignInWall, { blurredText } from '../../src/components/SignInWall';
 import { staggerDelay } from '../../src/theme/motion';
 
 type View2 = 'players' | 'drivers';
@@ -23,18 +24,21 @@ export default function StandingsScreen() {
   const [loaded, setLoaded] = useState(false);
   const [driversLoaded, setDriversLoaded] = useState(false);
   const [view, setView] = useState<View2>('players');
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const router = useRouter();
   const progress = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(() => {
+    // The league table is the one thing guests cannot see, so don't ask for it:
+    // the request is a guaranteed 401 and would spin the refresh control.
+    if (!isAuthenticated) { setLoaded(true); return; }
     setRefreshing(true);
     standingsApi
       .getGlobalStandings()
       .then(setStandings)
       .catch(console.error)
       .finally(() => { setRefreshing(false); setLoaded(true); });
-  }, []);
+  }, [isAuthenticated]);
 
   const loadDrivers = useCallback(() => {
     setDriversRefreshing(true);
@@ -114,6 +118,29 @@ export default function StandingsScreen() {
     </View>
   );
 
+  const lockedPlayersPage = (
+    <SignInWall
+      title="The championship is for members"
+      message="Sign in to see where everyone stands, follow the points race and open any player's season."
+      backdrop={
+        <View style={styles.listContent}>
+          {[68, 54, 49, 37, 22].map((pts, i) => (
+            <View key={i} style={styles.row}>
+              <View style={[styles.plate, i === 0 ? styles.plateLeader : styles.plateDefault]}>
+                <Text style={[styles.plateText, i === 0 && { color: colors.heroBottom }]}>{pad(i + 1)}</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.name, blurredText(7)]} numberOfLines={1}>Member name</Text>
+                <Text style={[styles.stats, blurredText(5)]} numberOfLines={1}>2 wins called · 1 pole</Text>
+              </View>
+              <Text style={[styles.pts, blurredText(7)]}>{pts}</Text>
+            </View>
+          ))}
+        </View>
+      }
+    />
+  );
+
   const playersPage = (
     <FlatList
       data={standings}
@@ -185,7 +212,7 @@ export default function StandingsScreen() {
       </View>
 
       <SwipeViews index={view === 'players' ? 0 : 1} onIndexChange={(i) => setView(i === 0 ? 'players' : 'drivers')} progress={progress}>
-        {playersPage}
+        {isAuthenticated ? playersPage : lockedPlayersPage}
         {driversPage}
       </SwipeViews>
     </View>

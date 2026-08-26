@@ -64,7 +64,7 @@ export default function RootLayout() {
     return () => clearTimeout(t);
   }, [fontsLoaded, fontError]);
 
-  const { isAuthenticated, accessToken, hasHydrated } = useAuthStore();
+  const { isAuthenticated, accessToken, isGuest, signInPending, hasHydrated } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
 
@@ -92,13 +92,15 @@ export default function RootLayout() {
     // (and logging out on any failure) was a second source of surprise logouts.
     const hasValidToken = isAuthenticated && accessToken && accessToken.length > 0;
 
-    // Auth redirection logic
-    if (!hasValidToken && !inAuthGroup) {
+    // Auth redirection logic. A guest is deliberately allowed to stay on the
+    // login screen — that is how they get back to signing in — so only a
+    // signed-out, non-guest visitor is pushed to it.
+    if (!hasValidToken && (!isGuest || signInPending) && !inAuthGroup) {
       router.replace('/(auth)/login');
     } else if (hasValidToken && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, accessToken, segments, ready]);
+  }, [isAuthenticated, accessToken, isGuest, signInPending, segments, ready]);
 
   // Deliberately not null, and no longer a bare coloured view either. Returning
   // null renders a white page indistinguishable from a crash; an empty carbon

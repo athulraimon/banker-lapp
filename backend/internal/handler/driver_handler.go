@@ -35,8 +35,11 @@ func (h *DriverHandler) GetDriverStandings(c echo.Context) error {
 	return c.JSON(http.StatusOK, standings)
 }
 
-func (h *DriverHandler) RegisterRoutes(e *echo.Echo, authMiddleware echo.MiddlewareFunc) {
-	protected := e.Group("/drivers", authMiddleware)
+// RegisterRoutes leaves the driver grid and the official F1 standings open to
+// guests: both come straight from Jolpica and contain nothing about our players.
+// Guests need the grid to try the prediction editor before signing in.
+func (h *DriverHandler) RegisterRoutes(e *echo.Echo, optionalAuth echo.MiddlewareFunc) {
+	protected := e.Group("/drivers", optionalAuth)
 	protected.GET("", h.GetDrivers)
 	protected.GET("/standings", h.GetDriverStandings)
 }

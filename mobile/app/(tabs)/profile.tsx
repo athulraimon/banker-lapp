@@ -19,6 +19,7 @@ import { showAlert } from '../../src/components/AppDialog';
 import FadeInView from '../../src/components/anim/FadeInView';
 import PressableScale from '../../src/components/anim/PressableScale';
 import PixelCar from '../../src/components/PixelCar';
+import SignInWall from '../../src/components/SignInWall';
 
 // Matches the server's bounds (service.DisplayNameMinLen / MaxLen). Enforced here
 // too so a bad name is caught before a round trip, but the server is the one that
@@ -84,7 +85,24 @@ export default function ProfileScreen() {
     }
   };
 
-  if (!user) return null;
+  // Guests get the sign-in door and nothing else: there is no name to change and
+  // no account to delete until there is an account.
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Profile</Text>
+          <Text style={styles.subtitle}>You’re looking around as a guest.</Text>
+          <View style={styles.guestWall}>
+            <SignInWall
+              title="Join the championship"
+              message="Signing in with Google gives you a place on the grid: make predictions, score points and appear in the league table."
+            />
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   const initial = (user.display_name || user.email || '?').trim().charAt(0).toUpperCase();
 
@@ -211,6 +229,9 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  // SignInWall centres itself in the space it is given, and a ScrollView child
+  // with flex:1 collapses to nothing, so the height is stated here.
+  guestWall: { height: 340, marginTop: 8 },
   container: { flex: 1, backgroundColor: colors.bgCarbon },
   inner: { padding: 20, paddingTop: 64, paddingBottom: 40 },
   title: { fontFamily: 'Jost-Bold', fontSize: 26, lineHeight: 34, color: colors.textPrimary },

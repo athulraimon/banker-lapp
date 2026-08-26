@@ -73,12 +73,25 @@ type RaceResultWithPredictions struct {
 	RaceScores []domain.RaceScore `json:"race_scores"`
 }
 
-func (s *RaceService) GetRaceResults(ctx context.Context, id string) (*RaceResultWithPredictions, error) {
+// GetRaceResults returns the official podium, and — only when includePlayers is
+// set — what everyone predicted and scored. Guests get the F1 result, which is
+// public knowledge anyway, without the league's picks and names attached.
+func (s *RaceService) GetRaceResults(ctx context.Context, id string, includePlayers bool) (*RaceResultWithPredictions, error) {
 	result, err := s.resultRepo.GetRaceResult(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	
+
+	if !includePlayers {
+		// Empty slices rather than nil: the app renders `predictions.length`
+		// without a guard, and JSON null would crash it.
+		return &RaceResultWithPredictions{
+			RaceResult:  result,
+			Predictions: []domain.Prediction{},
+			RaceScores:  []domain.RaceScore{},
+		}, nil
+	}
+
 	predictions, err := s.predRepo.GetAllPredictionsForRace(ctx, id)
 	if err != nil {
 		return nil, err
