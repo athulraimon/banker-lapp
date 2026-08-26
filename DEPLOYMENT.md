@@ -8,11 +8,12 @@ and no machine of yours left switched on**.
 3. [Environment variables](#environment-variables)
 4. [Google Sign-In setup](#google-sign-in-setup) — **required for real logins**
 5. [Deploying to Render](#deploying-to-render)
-6. [Installing the app](#installing-the-app) — iPhone, Android, desktop
-7. [The Android APK (optional)](#the-android-apk-optional)
-8. [Cold starts and the keep-alive](#cold-starts-and-the-keep-alive)
-9. [Admin workflow](#admin-workflow)
-10. [Local development](#local-development)
+6. [Where the database lives](#where-the-database-lives) — **Neon, not Render**
+7. [Installing the app](#installing-the-app) — iPhone, Android, desktop
+8. [The Android APK (optional)](#the-android-apk-optional)
+9. [Cold starts and the keep-alive](#cold-starts-and-the-keep-alive)
+10. [Admin workflow](#admin-workflow)
+11. [Local development](#local-development)
 
 ---
 
@@ -41,8 +42,10 @@ Metro picks the right file per platform automatically. Every screen is shared.
 
 ## Architecture
 
-- **Backend** — Go (Echo) API + PostgreSQL, deployed as a Docker container on
-  Render's free tier.
+- **Backend** — Go (Echo) API, deployed as a Docker container on Render's free
+  tier. The PostgreSQL database is a **Neon** free database, not a Render one:
+  Render's free Postgres expires 30 days after creation and is then deleted.
+  See [Where the database lives](#where-the-database-lives).
 - **Web app (PWA)** — the Expo app exported for web, served as a Render static
   site. Installable on iOS, Android and desktop.
 - **Android app (optional)** — the same codebase built as an APK via EAS, still
@@ -64,7 +67,7 @@ Backend:
 | Variable | Required | Example | Notes |
 |---|---|---|---|
 | `APP_ENV` | no | `production` | `production` enables strict safety checks |
-| `DATABASE_URL` | yes | `postgres://…` | Injected by Render from the database |
+| `DATABASE_URL` | yes | `postgres://…neon.tech/…?sslmode=require` | Neon pooled connection string, set by hand in the Render dashboard |
 | `JWT_SECRET` | yes | *(32+ random chars)* | Render generates and keeps this |
 | `GOOGLE_CLIENT_ID` | yes | `123-abc.apps.googleusercontent.com` | **Web** client ID |
 | `ADMIN_EMAILS` | yes | `athulraimon@gmail.com` | Comma-separated |
@@ -118,8 +121,9 @@ your Google account, so it cannot be automated.
 
 ## Deploying to Render
 
-`render.yaml` in the repo root is a **Blueprint**: it declares the API, the
-database and the static web app in one file.
+`render.yaml` in the repo root is a **Blueprint**: it declares the API and the
+static web app in one file. The database is not in it — see
+[Where the database lives](#where-the-database-lives).
 
 ### First, one git repository at the project root
 
@@ -149,10 +153,11 @@ and confirm no `.env` is staged.
 
 1. Push the repo to GitHub.
 2. Render Dashboard → **New** → **Blueprint** → pick the repo.
-3. Render reads `render.yaml`, creates all three services, and wires
-   `DATABASE_URL` and `JWT_SECRET` automatically.
+3. Render reads `render.yaml`, creates both services, and generates
+   `JWT_SECRET` automatically.
 4. Fill in the values marked `sync: false`, which Render prompts for:
-   - `banker-lapp-api`: `GOOGLE_CLIENT_ID`, `ADMIN_EMAILS`, `ALLOWED_ORIGINS`
+   - `banker-lapp-api`: `DATABASE_URL` (from Neon), `GOOGLE_CLIENT_ID`,
+     `ADMIN_EMAILS`, `ALLOWED_ORIGINS`
    - `banker-lapp-web`: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WEB_CLIENT_ID`
 
    Chicken-and-egg: you don't know the URLs until Render creates the services.
@@ -169,10 +174,68 @@ so a broken commit is caught before Render tries to ship it.
 ### Free-tier limits worth knowing
 
 - The API sleeps after 15 minutes idle — see [cold starts](#cold-starts-and-the-keep-alive).
-- Render's free Postgres expires after **30 days** unless upgraded. If that
-  bites, swap in a [Neon](https://neon.tech) free database: create it, copy the
-  connection string into `DATABASE_URL`, and delete the `databases:` block from
-  `render.yaml`. Nothing in the code changes.
+- Free web services and static sites do **not** expire — only free Postgres
+  does, which is why the database lives on Neon. See below.
+
+---
+
+## Where the database lives
+
+**Neon** ([neon.tech](https://neon.tech)), free plan: 0.5 GB storage and ~100
+compute-hours a month per project, with no expiry date. This app's whole dataset
+is a few thousand rows, so it fits many times over.
+
+Render's free Postgres is *not* usable for anything you want to keep: it expires
+30 days after creation, and 14 days after that Render deletes it and all its
+data. An expired database cannot even be connected to — the only way to read
+your own rows again is to upgrade it to a paid instance type. That is what
+happened on 2026-08-26, and is why `render.yaml` no longer declares a database.
+
+Neon autosuspends an idle compute, so the first query after a quiet spell waits
+a few hundred milliseconds. That is invisible next to the API's own ~50s cold
+start.
+
+### Moving the data (or recovering it later)
+
+`scripts/migrate-db.sh` does the dump, the restore and a row-for-row check.
+It needs the PostgreSQL 17 client tools (`pg_dump`, `pg_restore`, `psql`) on
+PATH and both connection strings:
+
+```bash
+export SRC='postgres://…@…render.com/banker_lapp'          # Render EXTERNAL url
+export DST='postgres://…@…neon.tech/neondb?sslmode=require' # Neon pooled url
+./scripts/migrate-db.sh dump
+./scripts/migrate-db.sh restore
+./scripts/migrate-db.sh verify
+```
+
+Dumps are written to `$HOME/banker-lapp-db-backup`, deliberately outside the
+repo: they contain member emails and live refresh tokens.
+
+The dump carries the `schema_migrations` table with it, so `AUTO_MIGRATE` finds
+the schema already up to date on the next boot and applies nothing. Restoring
+`refresh_tokens` alongside it means nobody is logged out by the move, provided
+`JWT_SECRET` on the API service is left alone.
+
+Then, in order — the API must know the new address before the blueprint stops
+providing the old one:
+
+1. Render dashboard → `banker-lapp-api` → Environment → set `DATABASE_URL` to
+   the Neon string. Save; the service redeploys.
+2. Check `GET /ready` returns 200 and the app shows real standings.
+3. Push the `render.yaml` that drops the `databases:` block.
+4. Only once all of that is confirmed, delete the old Render database — and
+   keep the dump.
+
+### Back it up
+
+Neon's free plan has no scheduled logical backups either. A dump takes seconds:
+
+```bash
+SRC="$DATABASE_URL" ./scripts/migrate-db.sh dump
+```
+
+Worth doing after every race weekend's results are entered.
 
 ---
 

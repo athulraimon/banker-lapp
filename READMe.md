@@ -6,7 +6,7 @@ A private Formula 1 predictions championship: predict Pole + the P1/P2/P3 podium
 - **App:** Expo / React Native — runs as an **installable PWA** (iOS, Android, desktop) and as a native Android APK, from one codebase
 - **Auth:** Google Sign-In (admin rights via an email allowlist)
 - **Data:** live F1 calendar + driver grid from the [Jolpica F1 API](https://api.jolpi.ca) (the community successor to Ergast) — no mock/seed data
-- **Hosting:** Render free tier, auto-deployed on push
+- **Hosting:** Render free tier (API + PWA) with a [Neon](https://neon.tech) free Postgres, auto-deployed on push
 
 > **Deploying, Google login setup, or installing on an iPhone?** See **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
