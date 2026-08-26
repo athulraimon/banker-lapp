@@ -70,7 +70,7 @@ Backend:
 | `DATABASE_URL` | yes | `postgres://…neon.tech/…?sslmode=require` | Neon pooled connection string, set by hand in the Render dashboard |
 | `JWT_SECRET` | yes | *(32+ random chars)* | Render generates and keeps this |
 | `GOOGLE_CLIENT_ID` | yes | `123-abc.apps.googleusercontent.com` | **Web** client ID |
-| `ADMIN_EMAILS` | yes | `athulraimon@gmail.com` | Comma-separated |
+| `ADMIN_EMAILS` | yes | `you@example.com` | Comma-separated |
 | `ALLOWED_ORIGINS` | yes in prod | `https://banker-lapp-web.onrender.com` | The PWA's origin — CORS blocks it otherwise |
 | `DEFAULT_SEASON` | no | `2026` | |
 | `PORT` | no | `8080` | |

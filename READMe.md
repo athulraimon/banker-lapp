@@ -1,133 +1,72 @@
 # Banker Lapp — F1 Private Predictions
 
-A private Formula 1 predictions championship: predict Pole + the P1/P2/P3 podium for each Grand Prix, get scored against the real results, and climb the season leaderboard.
+A private Formula 1 predictions championship. Call the pole-sitter and the
+podium for each Grand Prix, get scored against the real result, climb the
+season table.
 
-- **Backend:** Go (Echo) · PostgreSQL
-- **App:** Expo / React Native — runs as an **installable PWA** (iOS, Android, desktop) and as a native Android APK, from one codebase
-- **Auth:** Google Sign-In (admin rights via an email allowlist)
-- **Data:** live F1 calendar + driver grid from the [Jolpica F1 API](https://api.jolpi.ca) (the community successor to Ergast) — no mock/seed data
-- **Hosting:** Render free tier (API + PWA) with a [Neon](https://neon.tech) free Postgres, auto-deployed on push
+**Live app:** [banker-lapp-web.onrender.com](https://banker-lapp-web.onrender.com)
+— installs to any phone or desktop. Look around as a guest, or sign in with
+Google to play.
 
-> **Deploying, Google login setup, or installing on an iPhone?** See **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+## The game
 
-## Architecture
+- Pick **Pole, P1, P2 and P3** before Practice 1 starts, which is when picks lock.
+- Points, exact matches only: **Pole 5 · P1 15 · P2 10 · P3 8**.
+- Your pole pick can also be your P1. P1/P2/P3 must be three different drivers.
+- The calendar, the driver grid and the official results come live from the
+  [Jolpica F1 API](https://api.jolpi.ca). Nothing is made up.
 
-Clean-architecture Go backend (domain → repository → service → handler) with:
+Guests see the calendar, circuits, results and the F1 drivers' championship, and
+can try the prediction sheet. Saving a prediction or seeing the league table
+needs an account.
 
-- **Auth** — Google ID-token verification → short-lived JWT access tokens + refresh tokens stored in Postgres. Admin status is derived from the `ADMIN_EMAILS` allowlist on every login.
-- **Schedule & drivers** — pulled live from Jolpica (admin taps *Sync Schedule*; the driver grid is cached in-process).
-- **Scoring engine** — exact-match: Pole = 5, P1 = 15, P2 = 10, P3 = 8.
-- **Admin controls** — set official results (auto-rescores), re-run scoring, and edit any user's prediction.
-- **Migrations** — embedded SQL, applied automatically on boot.
+## Built with
 
-App: Google login, dashboard with the active GP + calendar, prediction editor with a live driver search sheet, championship standings, per-race breakdown, and an admin panel.
+| Part | What it is |
+|---|---|
+| Backend | Go (Echo) API, one Docker container on Render's free tier |
+| Database | [Neon](https://neon.tech) free Postgres |
+| App | One Expo / React Native codebase, shipped as an installable web app (PWA) and an Android APK |
+| Auth | Google Sign-In. Admin rights come from an `ADMIN_EMAILS` list |
 
-### One codebase, three targets
+Every push to `main` deploys itself.
 
-Screens and styling are shared. Only two modules have platform-specific
-implementations, resolved automatically by Metro's `.web.ts` extension:
+## Run it locally
 
-| Module | Native | Web |
-|---|---|---|
-| `src/auth/googleAuth` | Google Play Services sign-in | OpenID Connect redirect |
-| `src/store/storage` | `expo-secure-store` | `localStorage` |
-
-`src/components/AppShell` additionally constrains the web layout to a
-phone-width column so the mobile design isn't stretched across a desktop
-monitor.
-
-## Quick start (local development)
-
-### Prerequisites
-- Go 1.24+
-- Node.js 18+
-- Docker + Docker Compose
-- Android Studio (emulator) or a physical Android device — only if you want the native build
-
-### 1. Infrastructure
+You need Go 1.24+, Node 18+ and Docker.
 
 ```bash
-docker compose up -d
+docker compose up -d                  # Postgres on port 5433
+cd backend && go run ./cmd/api        # API on :9000, migrations run themselves
 ```
 
-Starts PostgreSQL on host port **5433** (→ container 5432). Port 5433 avoids clashing with a native PostgreSQL install that commonly owns 5432 on Windows. Redis is no longer needed.
-
-### 2. Backend
-
-`backend/.env` (already present for local dev):
-
-```env
-APP_ENV=development
-DATABASE_URL=postgres://postgres:password@localhost:5433/banker_lapp?sslmode=disable
-JWT_SECRET=super_secret_jwt_key_for_local_dev_123
-GOOGLE_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
-ADMIN_EMAILS=you@example.com
-DEFAULT_SEASON=2026
-PORT=9000
-```
-
-Run it:
-
-```bash
-cd backend
-go run ./cmd/api
-```
-
-Migrations apply automatically. Health: `GET http://localhost:9000/health`, readiness: `GET /ready`.
-
-> In development, `ENABLE_DEV_LOGIN` defaults on, exposing `POST /auth/dev` for an admin session with no Google account. It is force-disabled when `APP_ENV=production`.
-
-### 3. App
+The API reads `backend/.env` — copy `backend/.env.example` to start.
 
 ```bash
 cd mobile
 npm install --legacy-peer-deps
+npm run web                           # http://localhost:8081
 ```
 
-**Web (fastest loop — no emulator, no native build):**
+In development, `POST /auth/dev` hands you an admin session with no Google
+account needed. From there: **Admin → Sync F1 Schedule** loads the real
+calendar, then set a result and watch the scores land.
 
-```bash
-npm run web          # http://localhost:8081
-```
-
-**Android:**
-
-```bash
-npx expo run:android
-```
-
-`mobile/.env.local` points the app at the backend:
-
-```env
-EXPO_PUBLIC_API_URL=http://localhost:9000
-EXPO_PUBLIC_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
-```
-
-On the Android emulator use `http://10.0.2.2:9000` — the emulator cannot see `localhost`. The native build uses native modules (Google Sign-In), so **Expo Go will not work**; use the development build above. The web target has no such restriction.
-
-### 4. Try it
-
-1. Launch the app → **Dev Mode Login Bypass** (dev builds only) signs you in as an admin.
-2. **Admin tab → Sync F1 Schedule** loads the real 2026 calendar from Jolpica.
-3. Open a race and submit a prediction; as admin, set results and watch scores + standings update.
-
-## Scoring
-
-| Slot | Points |
-|------|--------|
-| Pole (exact) | 5 |
-| P1 (exact) | 15 |
-| P2 (exact) | 10 |
-| P3 (exact) | 8 |
-
-The pole-sitter may also be your P1 (that's allowed); P1/P2/P3 must be three different drivers.
+For the native build use `npx expo run:android`, and point it at
+`http://10.0.2.2:9000` in `mobile/.env.local` — an emulator cannot see
+`localhost`. Expo Go will not work, because Google Sign-In is a native module.
 
 ## Repo layout
 
 ```
-backend/          Go API (cmd/api, internal/*, migrations/)
-mobile/           Expo app — app/ routes, src/ shared code, public/ PWA assets
-render.yaml       Render Blueprint: API + Postgres + static web app
+backend/            Go API — cmd/api, internal/*, migrations/
+mobile/             Expo app — app/ routes, src/ shared code, public/ PWA assets
+scripts/            Database migration + backup helper
+render.yaml         Render blueprint: the API and the web app
 docker-compose.yml  Local Postgres
-.github/workflows/  CI on every push, plus the free-tier keep-alive ping
+.github/workflows/  CI on every push, plus the keep-alive ping
 ```
+
+## Deploying, Google sign-in, installing on an iPhone
+
+All in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
