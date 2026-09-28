@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"banker_lapp_backend/internal/domain"
 
@@ -13,7 +14,7 @@ import (
 // can't drift apart when a session is added.
 const raceColumns = `id, api_race_id, grand_prix, circuit_name, country,
 	fp1_time, fp2_time, fp3_time, sprint_qualifying_time, sprint_time,
-	qualifying_time, race_time, season, status`
+	qualifying_time, race_time, season, status, pole_driver_id`
 
 type RaceRepository struct {
 	db *pgxpool.Pool
@@ -27,7 +28,7 @@ func scanRace(row pgx.Row, race *domain.Race) error {
 	return row.Scan(
 		&race.ID, &race.APIRaceID, &race.GrandPrix, &race.CircuitName, &race.Country,
 		&race.FP1Time, &race.FP2Time, &race.FP3Time, &race.SprintQualifyingTime, &race.SprintTime,
-		&race.QualifyingTime, &race.RaceTime, &race.Season, &race.Status,
+		&race.QualifyingTime, &race.RaceTime, &race.Season, &race.Status, &race.PoleDriverID,
 	)
 }
 
@@ -156,4 +157,63 @@ func (r *RaceRepository) GetRaceByID(ctx context.Context, id string) (*domain.Ra
 		return nil, err
 	}
 	return &race, nil
+}
+
+// SetPoleDriverID records the auto-detected pole sitter ahead of the full race
+// result. Safe to call repeatedly; the poller only calls it once per race
+// since ListRacesNeedingPolePoll excludes rows that already have one.
+func (r *RaceRepository) SetPoleDriverID(ctx context.Context, id, driverID string) error {
+	_, err := r.db.Exec(ctx, `UPDATE races SET pole_driver_id = $2 WHERE id = $1`, id, driverID)
+	return err
+}
+
+// ListRacesNeedingPolePoll returns races whose qualifying session has started
+// but whose pole sitter is not yet known, bounded by raceDuration past race
+// time so a race Jolpica never publishes doesn't get polled forever.
+func (r *RaceRepository) ListRacesNeedingPolePoll(ctx context.Context, now time.Time, raceDuration time.Duration) ([]domain.Race, error) {
+	query := `SELECT ` + raceColumns + ` FROM races
+		WHERE pole_driver_id IS NULL
+		  AND status != 'completed'
+		  AND qualifying_time <= $1
+		  AND race_time + make_interval(secs => $2) > $1`
+	rows, err := r.db.Query(ctx, query, now, raceDuration.Seconds())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	races := make([]domain.Race, 0)
+	for rows.Next() {
+		var race domain.Race
+		if err := scanRace(rows, &race); err != nil {
+			return nil, err
+		}
+		races = append(races, race)
+	}
+	return races, rows.Err()
+}
+
+// ListRacesNeedingResultPoll returns races whose race session has started but
+// which have no official result yet, bounded the same way as
+// ListRacesNeedingPolePoll.
+func (r *RaceRepository) ListRacesNeedingResultPoll(ctx context.Context, now time.Time, raceDuration time.Duration) ([]domain.Race, error) {
+	query := `SELECT ` + raceColumns + ` FROM races
+		WHERE status != 'completed'
+		  AND race_time <= $1
+		  AND race_time + make_interval(secs => $2) > $1`
+	rows, err := r.db.Query(ctx, query, now, raceDuration.Seconds())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	races := make([]domain.Race, 0)
+	for rows.Next() {
+		var race domain.Race
+		if err := scanRace(rows, &race); err != nil {
+			return nil, err
+		}
+		races = append(races, race)
+	}
+	return races, rows.Err()
 }

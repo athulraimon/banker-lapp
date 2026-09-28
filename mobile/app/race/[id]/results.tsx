@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, RefreshControl } from 'react-native';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../src/theme/colors';
 import { racesApi, Race, RaceResultWithPredictions } from '../../../src/api/races';
@@ -15,6 +15,7 @@ import PressableScale from '../../../src/components/anim/PressableScale';
 import { staggerDelay } from '../../../src/theme/motion';
 import { useAuthStore } from '../../../src/store/useAuthStore';
 import SignInWall from '../../../src/components/SignInWall';
+import { isWeekendOver } from '../../../src/utils/raceWindow';
 
 type RaceTab = 'predictions' | 'info';
 
@@ -25,26 +26,41 @@ export default function RaceResultsScreen() {
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResultWithPredictions | null>(null);
   const [tab, setTab] = useState<RaceTab>('predictions');
+  const [refreshing, setRefreshing] = useState(false);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const progress = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    if (id) {
-      racesApi.getRace(id as string).then(setRace).catch(console.error);
-      // A guest has no prediction of their own, and the server sends them the
-      // official podium with everyone else's picks stripped out.
-      if (isAuthenticated) {
-        predictionsApi.getPrediction(id as string).then(setPrediction).catch(console.error);
-      }
-      racesApi.getRaceResults(id as string).then(setRaceResults).catch(console.error);
+  const load = useCallback((opts?: { silent?: boolean }) => {
+    if (!id) return;
+    if (!opts?.silent) setRefreshing(true);
+    const tasks: Promise<unknown>[] = [
+      racesApi.getRace(id as string).then(setRace),
+      racesApi.getRaceResults(id as string).then(setRaceResults),
+    ];
+    // A guest has no prediction of their own, and the server sends them the
+    // official podium with everyone else's picks stripped out.
+    if (isAuthenticated) {
+      tasks.push(predictionsApi.getPrediction(id as string).then(setPrediction));
     }
+    Promise.all(tasks).catch(console.error).finally(() => setRefreshing(false));
   }, [id, isAuthenticated]);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Other players' picks and scores can keep arriving after this race first
+  // shows a result (steward penalties, late scoring, etc.), so poll until the
+  // weekend is fully over instead of relying on the player to pull to refresh.
+  useEffect(() => {
+    if (!race || isWeekendOver(race.race_time)) return;
+    const t = setInterval(() => load({ silent: true }), 20000);
+    return () => clearInterval(t);
+  }, [race?.race_time, load]);
 
   if (!race) return <LoadingScreen label="Loading race…" />;
 
   const userScore = raceResults?.race_scores?.find(s => s.user_id === prediction?.user_id);
   const actual = raceResults?.race_result;
-  const weekendOver = Date.now() > new Date(race.race_time).getTime() + 4 * 60 * 60 * 1000;
+  const weekendOver = isWeekendOver(race.race_time);
 
   const slots = [
     { key: 'pole', label: 'POLE' },
@@ -132,7 +148,11 @@ export default function RaceResultsScreen() {
         progress={progress}
       >
         {/* Breakdown */}
-        <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.inner}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load()} tintColor={colors.brass} />}
+        >
           <FadeInView>
             <View style={styles.summary}>
               <CheckerStripe colorA={colors.cream} colorB={colors.heroBottom} />

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"banker_lapp_backend/internal/domain"
@@ -117,7 +119,125 @@ func (s *AdminService) SetRaceResults(ctx context.Context, raceID string, result
 	if err := s.raceRepo.UpdateStatus(ctx, raceID, "completed"); err != nil {
 		return fmt.Errorf("mark completed: %w", err)
 	}
+	// Keep races.pole_driver_id (the early, pre-podium signal shown on the
+	// prediction screen) in sync with whatever pole ended up in the official
+	// result — including when an admin corrects the pole after the fact.
+	if result.PoleDriverID != "" {
+		if err := s.raceRepo.SetPoleDriverID(ctx, raceID, result.PoleDriverID); err != nil {
+			return fmt.Errorf("save pole: %w", err)
+		}
+	}
 	return s.RecalculateScores(ctx, raceID)
+}
+
+// PollQualifyingResults checks Jolpica for the pole sitter of every race whose
+// qualifying session has started but has no pole recorded yet, within the
+// RaceDuration window (see ListRacesNeedingPolePoll). Returns how many it set.
+//
+// Jolpica publishes qualifying results shortly after the session ends, not
+// live, so a race just gets tried again on the next tick until it appears or
+// the window closes — at which point the admin's manual entry is the fallback.
+func (s *AdminService) PollQualifyingResults(ctx context.Context) (int, error) {
+	races, err := s.raceRepo.ListRacesNeedingPolePoll(ctx, time.Now(), domain.RaceDuration)
+	if err != nil {
+		return 0, fmt.Errorf("list races needing pole: %w", err)
+	}
+
+	set := 0
+	for _, race := range races {
+		season, round, ok := parseJolpicaRaceID(race.APIRaceID)
+		if !ok {
+			continue
+		}
+		pole, err := s.f1.FetchQualifyingResult(ctx, season, round)
+		if err != nil {
+			log.Printf("[poller] fetch qualifying for %s failed: %v", race.GrandPrix, err)
+			continue
+		}
+		if pole == "" {
+			continue // not classified by Jolpica yet; try again next tick
+		}
+		if err := s.raceRepo.SetPoleDriverID(ctx, race.ID, pole); err != nil {
+			return set, fmt.Errorf("save pole for %s: %w", race.GrandPrix, err)
+		}
+		log.Printf("[poller] pole for %s: %s", race.GrandPrix, pole)
+		set++
+	}
+	return set, nil
+}
+
+// PollRaceResults checks Jolpica for the top three of every race whose race
+// session has started but has no official result yet, within the RaceDuration
+// window (see ListRacesNeedingResultPoll). A race found here reuses
+// SetRaceResults, so it locks in, marks completed and scores exactly like a
+// manual admin entry — and is never polled again afterwards. Returns how many
+// it completed.
+func (s *AdminService) PollRaceResults(ctx context.Context) (int, error) {
+	races, err := s.raceRepo.ListRacesNeedingResultPoll(ctx, time.Now(), domain.RaceDuration)
+	if err != nil {
+		return 0, fmt.Errorf("list races needing results: %w", err)
+	}
+
+	set := 0
+	for _, race := range races {
+		season, round, ok := parseJolpicaRaceID(race.APIRaceID)
+		if !ok {
+			continue
+		}
+		p1, p2, p3, err := s.f1.FetchRaceResult(ctx, season, round)
+		if err != nil {
+			log.Printf("[poller] fetch results for %s failed: %v", race.GrandPrix, err)
+			continue
+		}
+		if p1 == "" || p2 == "" || p3 == "" {
+			continue // not fully classified by Jolpica yet; try again next tick
+		}
+
+		pole := ""
+		if race.PoleDriverID != nil {
+			pole = *race.PoleDriverID
+		} else {
+			// The pole poller normally catches this well before the race, but a
+			// race that only just entered its window (e.g. the service was
+			// asleep through qualifying) may still be missing it — fetch it
+			// directly rather than completing the race without one.
+			pole, err = s.f1.FetchQualifyingResult(ctx, season, round)
+			if err != nil {
+				log.Printf("[poller] fetch qualifying for %s failed: %v", race.GrandPrix, err)
+				continue
+			}
+		}
+
+		result := &domain.RaceResult{
+			RaceID:       race.ID,
+			PoleDriverID: pole,
+			P1DriverID:   p1,
+			P2DriverID:   p2,
+			P3DriverID:   p3,
+		}
+		if err := s.SetRaceResults(ctx, race.ID, result); err != nil {
+			return set, fmt.Errorf("save results for %s: %w", race.GrandPrix, err)
+		}
+		log.Printf("[poller] results for %s: pole=%s p1=%s p2=%s p3=%s", race.GrandPrix, pole, p1, p2, p3)
+		set++
+	}
+	return set, nil
+}
+
+// parseJolpicaRaceID extracts the season and round from an APIRaceID of the
+// form "jolpica-{season}-{round}", the format FetchRaceWeekends always
+// produces. Returns ok=false for anything else rather than guessing.
+func parseJolpicaRaceID(apiRaceID string) (season, round int, ok bool) {
+	parts := strings.Split(apiRaceID, "-")
+	if len(parts) != 3 || parts[0] != "jolpica" {
+		return 0, 0, false
+	}
+	season, err1 := strconv.Atoi(parts[1])
+	round, err2 := strconv.Atoi(parts[2])
+	if err1 != nil || err2 != nil {
+		return 0, 0, false
+	}
+	return season, round, true
 }
 
 // RecalculateScores re-runs the scoring engine for every prediction submitted

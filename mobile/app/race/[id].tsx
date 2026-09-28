@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, RefreshControl } from 'react-native';
 import { showAlert } from '../../src/components/AppDialog';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
@@ -37,29 +37,42 @@ export default function PredictionEditorScreen() {
   const [tab, setTab] = useState<RaceTab>('predictions');
   const [activeSlot, setActiveSlot] = useState<Slot | null>(null);
   const [saved, setSaved] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
 
   const bottomSheetRef = useRef<DriverSearchSheetRef>(null);
 
-  useEffect(() => {
-    if (id) {
-      racesApi.getRace(id as string).then(race => {
-        setRace(race);
-        if (race.status === 'completed') {
-          router.replace(`/race/${id}/results`);
-        }
-      }).catch(console.error);
-      if (isAuthenticated) {
-        predictionsApi.getPrediction(id as string).then(pred => {
-          if (pred) setPrediction(pred);
-        }).catch(console.error);
-      } else if (pending && pending.race_id === id) {
-        // A guest who started picking, was asked to sign in and came back
-        // without doing so still has their slate.
-        setPrediction(pending);
+  const load = useCallback((opts?: { silent?: boolean }) => {
+    if (!id) return;
+    if (!opts?.silent) setRefreshing(true);
+    racesApi.getRace(id as string).then(race => {
+      setRace(race);
+      if (race.status === 'completed') {
+        router.replace(`/race/${id}/results`);
       }
+    }).catch(console.error).finally(() => setRefreshing(false));
+    if (isAuthenticated) {
+      predictionsApi.getPrediction(id as string).then(pred => {
+        if (pred) setPrediction(pred);
+      }).catch(console.error);
+    } else if (pending && pending.race_id === id) {
+      // A guest who started picking, was asked to sign in and came back
+      // without doing so still has their slate.
+      setPrediction(pending);
     }
   }, [id, isAuthenticated]);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Once FP1 has passed, pole and the full result can land at any moment —
+  // poll quietly so they show up without the player having to reopen the
+  // screen. Stops the instant the race is marked completed (the load() above
+  // then redirects to the results screen) or the weekend is fully over.
+  useEffect(() => {
+    if (race?.status !== 'locked') return;
+    const t = setInterval(() => load({ silent: true }), 20000);
+    return () => clearInterval(t);
+  }, [race?.status, load]);
 
   const locked = race?.status === 'locked' || race?.status === 'completed';
 
@@ -182,9 +195,16 @@ export default function PredictionEditorScreen() {
             contentContainerStyle={styles.pageInner}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load()} tintColor={colors.brass} />}
           >
             <FadeInView>
               <Text style={styles.eyebrow}>Qualifying · 5 pts</Text>
+              {race.pole_driver_id && (
+                <Text style={styles.poleConfirmed}>
+                  Confirmed pole: {race.pole_driver_id}
+                  {driversById[race.pole_driver_id] ? ` · ${driversById[race.pole_driver_id].broadcast_name}` : ''}
+                </Text>
+              )}
               {renderSlot('pole', 'POLE', true)}
 
               <Text style={[styles.eyebrow, { marginTop: 22 }]}>Podium · 15 / 10 / 8 pts</Text>
@@ -326,6 +346,7 @@ const styles = StyleSheet.create({
   },
   warnText: { fontFamily: 'Karla-Regular', fontSize: 12.5, color: colors.redText },
   note: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.textMuted, marginTop: 14, lineHeight: 18 },
+  poleConfirmed: { fontFamily: 'Karla-Regular', fontSize: 11.5, color: colors.brass, marginBottom: 8 },
 
   saveBarWrap: {
     position: 'absolute',

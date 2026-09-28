@@ -120,10 +120,15 @@ func main() {
 	driverHandler.RegisterRoutes(e, optionalAuth)
 
 	// Start Scheduler
-	cronScheduler := scheduler.NewScheduler(refreshRepo, func(ctx context.Context) error {
-		_, err := adminService.SyncSchedule(ctx, cfg.DefaultSeason)
-		return err
-	})
+	cronScheduler := scheduler.NewScheduler(
+		refreshRepo,
+		func(ctx context.Context) error {
+			_, err := adminService.SyncSchedule(ctx, cfg.DefaultSeason)
+			return err
+		},
+		adminService.PollQualifyingResults,
+		adminService.PollRaceResults,
+	)
 	cronScheduler.Start()
 	defer cronScheduler.Stop()
 

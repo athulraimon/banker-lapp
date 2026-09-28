@@ -8,7 +8,7 @@ import (
 func TestPredictionWindowStatus(t *testing.T) {
 	fp1 := time.Date(2026, 8, 21, 10, 30, 0, 0, time.UTC)  // Dutch GP FP1
 	prev := time.Date(2026, 7, 26, 13, 0, 0, 0, time.UTC)  // Hungarian GP start
-	openFrom := prev.Add(RaceDuration)                     // 15:15 on race day
+	openFrom := prev.Add(RaceDuration) // race day, RaceDuration after start
 
 	cases := []struct {
 		name string
@@ -43,8 +43,8 @@ func TestFirstRaceOfSeasonOpensImmediately(t *testing.T) {
 	}
 }
 
-// The headline behaviour: the next race takes over 2h15m after the previous one
-// starts, not a fixed number of days before its own FP1.
+// The headline behaviour: the next race takes over RaceDuration after the
+// previous one starts, not a fixed number of days before its own FP1.
 func TestSeasonRolloverAtRaceEnd(t *testing.T) {
 	hungary := Race{
 		GrandPrix: "Hungarian", RaceTime: time.Date(2026, 7, 26, 13, 0, 0, 0, time.UTC),
@@ -65,8 +65,8 @@ func TestSeasonRolloverAtRaceEnd(t *testing.T) {
 		t.Errorf("Netherlands during Hungary = %q, want %q", during[1].Status, StatusUpcoming)
 	}
 
-	// 2h16m after lights out in Hungary: the Netherlands is now the active GP,
-	// even though its own FP1 is nearly four weeks away.
+	// A minute past RaceDuration after lights out in Hungary: the Netherlands is
+	// now the active GP, even though its own FP1 is nearly four weeks away.
 	after := DeriveSeasonStatuses(season, hungary.RaceTime.Add(RaceDuration+time.Minute))
 	if after[1].Status != StatusOpen {
 		t.Errorf("Netherlands after Hungary finished = %q, want %q", after[1].Status, StatusOpen)
@@ -100,9 +100,9 @@ func TestIsOver(t *testing.T) {
 	race := Race{RaceTime: start}
 
 	if race.IsOver(start.Add(RaceDuration - time.Minute)) {
-		t.Error("race reported over before 2h15m had elapsed")
+		t.Error("race reported over before RaceDuration had elapsed")
 	}
 	if !race.IsOver(start.Add(RaceDuration + time.Minute)) {
-		t.Error("race not reported over after 2h15m")
+		t.Error("race not reported over after RaceDuration")
 	}
 }

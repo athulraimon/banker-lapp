@@ -14,11 +14,15 @@ const (
 	StatusCompleted = "completed"
 )
 
-// RaceDuration is how long after lights out a Grand Prix is treated as finished.
-// The FIA's maximum race time is three hours, but a normal race runs well under
-// two; 2h15m is the point where the previous weekend stops being interesting and
-// the next one becomes the active Grand Prix.
-const RaceDuration = 2*time.Hour + 15*time.Minute
+// RaceDuration is how long after lights out a Grand Prix is treated as
+// finished — the point where the previous weekend stops being interesting and
+// the next one becomes the active Grand Prix. It also bounds the automatic
+// results poller (see external.F1Client / scheduler): once a race is this far
+// past its start, the poller stops trying and leaves it to a manual admin
+// entry. The FIA's maximum race time is three hours, which is also the figure
+// used here so a poll is never abandoned before an official result could
+// legitimately still land.
+const RaceDuration = 3 * time.Hour
 
 type Race struct {
 	ID             string    `json:"id"`
@@ -39,6 +43,13 @@ type Race struct {
 	FP3Time              *time.Time `json:"fp3_time,omitempty"`
 	SprintQualifyingTime *time.Time `json:"sprint_qualifying_time,omitempty"`
 	SprintTime           *time.Time `json:"sprint_time,omitempty"`
+
+	// PoleDriverID is set automatically once qualifying results are available
+	// (see AdminService.PollQualifyingResults), so the app can show it before
+	// the race itself has a result. Separate from RaceResult.PoleDriverID,
+	// which is only written once the full podium is also known and scoring can
+	// run — a nil value here never affects scoring.
+	PoleDriverID *string `json:"pole_driver_id,omitempty"`
 }
 
 // IsOver reports whether the race has finished, and therefore whether the next

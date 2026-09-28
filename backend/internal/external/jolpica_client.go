@@ -17,9 +17,12 @@ import (
 //
 // This replaced the OpenF1 client. OpenF1 moved current-season data behind paid
 // sponsorship: requests for the running season return 401, while older seasons
-// still work unauthenticated. Since this app only needs the calendar and the
-// driver grid — race results are entered by an admin, not fetched — Jolpica
-// covers everything with no account, token or cost.
+// still work unauthenticated. Jolpica covers the calendar, the driver grid,
+// and — once a session has finished — its official classification, all with
+// no account, token or cost. It is not a live-timing feed: qualifying and race
+// classifications only appear here after Jolpica has ingested them, typically
+// shortly after the chequered flag, which is what the results poller
+// (AdminService.PollQualifyingResults / PollRaceResults) is polling for.
 type F1Client struct {
 	baseURL string
 	client  *http.Client
@@ -106,6 +109,32 @@ type ergastDriversResponse struct {
 		DriverTable struct {
 			Drivers []ergastDriver `json:"Drivers"`
 		} `json:"DriverTable"`
+	} `json:"MRData"`
+}
+
+type ergastQualifyingResponse struct {
+	MRData struct {
+		RaceTable struct {
+			Races []struct {
+				QualifyingResults []struct {
+					Position string       `json:"position"`
+					Driver   ergastDriver `json:"Driver"`
+				} `json:"QualifyingResults"`
+			} `json:"Races"`
+		} `json:"RaceTable"`
+	} `json:"MRData"`
+}
+
+type ergastResultsResponse struct {
+	MRData struct {
+		RaceTable struct {
+			Races []struct {
+				Results []struct {
+					Position string       `json:"position"`
+					Driver   ergastDriver `json:"Driver"`
+				} `json:"Results"`
+			} `json:"Races"`
+		} `json:"RaceTable"`
 	} `json:"MRData"`
 }
 
@@ -268,6 +297,52 @@ func (c *F1Client) FetchDriverStandings(ctx context.Context, season int) ([]doma
 		})
 	}
 	return standings, nil
+}
+
+// FetchQualifyingResult returns the pole sitter's driver code for a round, or
+// "" if qualifying hasn't been classified by Jolpica yet.
+func (c *F1Client) FetchQualifyingResult(ctx context.Context, season, round int) (string, error) {
+	var out ergastQualifyingResponse
+	url := fmt.Sprintf("%s/%d/%d/qualifying/?format=json", c.baseURL, season, round)
+	if err := c.getJSON(ctx, url, &out); err != nil {
+		return "", err
+	}
+	races := out.MRData.RaceTable.Races
+	if len(races) == 0 {
+		return "", nil
+	}
+	for _, r := range races[0].QualifyingResults {
+		if r.Position == "1" {
+			return driverCode(r.Driver), nil
+		}
+	}
+	return "", nil
+}
+
+// FetchRaceResult returns the top three driver codes for a round, or empty
+// strings for any position Jolpica hasn't classified yet (e.g. mid-race, or
+// before results are published).
+func (c *F1Client) FetchRaceResult(ctx context.Context, season, round int) (p1, p2, p3 string, err error) {
+	var out ergastResultsResponse
+	url := fmt.Sprintf("%s/%d/%d/results/?format=json", c.baseURL, season, round)
+	if err := c.getJSON(ctx, url, &out); err != nil {
+		return "", "", "", err
+	}
+	races := out.MRData.RaceTable.Races
+	if len(races) == 0 {
+		return "", "", "", nil
+	}
+	for _, r := range races[0].Results {
+		switch r.Position {
+		case "1":
+			p1 = driverCode(r.Driver)
+		case "2":
+			p2 = driverCode(r.Driver)
+		case "3":
+			p3 = driverCode(r.Driver)
+		}
+	}
+	return p1, p2, p3, nil
 }
 
 func (c *F1Client) driversFromStandings(ctx context.Context, season int) ([]domain.Driver, error) {

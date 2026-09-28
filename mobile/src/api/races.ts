@@ -18,6 +18,11 @@ export interface Race {
   fp3_time?: string | null;
   sprint_qualifying_time?: string | null;
   sprint_time?: string | null;
+
+  // Set automatically once qualifying is classified, ahead of the full race
+  // result. Purely informational — scoring only ever reads pole from the
+  // official RaceResult below, once that exists.
+  pole_driver_id?: string | null;
 }
 
 export interface RaceResult {

@@ -14,6 +14,7 @@ import SegmentedTabs from '../../src/components/SegmentedTabs';
 import { Skeleton } from '../../src/components/Skeleton';
 import { staggerDelay } from '../../src/theme/motion';
 import { randomRadioLine } from '../../src/data/radioLines';
+import { isWeekendOver } from '../../src/utils/raceWindow';
 
 const pad = (n: number) => String(Math.max(0, Math.floor(n))).padStart(2, '0');
 
@@ -50,8 +51,7 @@ export default function DashboardScreen() {
     }, [isAuthenticated, isGuest])
   );
 
-  const RACE_OVER_BUFFER_MS = (2 * 60 + 15) * 60 * 1000;
-  const isWeekendOver = (r: Race) => Date.now() > new Date(r.race_time).getTime() + RACE_OVER_BUFFER_MS;
+  const weekendOver = (r: Race) => isWeekendOver(r.race_time);
 
   const roundById = useMemo(() => {
     const map: Record<string, number> = {};
@@ -61,9 +61,9 @@ export default function DashboardScreen() {
     return map;
   }, [races]);
 
-  const activeRace = races.find(r => !isWeekendOver(r));
-  const upcomingRaces = races.filter(r => !isWeekendOver(r) && r.id !== activeRace?.id);
-  const completedRaces = races.filter(r => isWeekendOver(r));
+  const activeRace = races.find(r => !weekendOver(r));
+  const upcomingRaces = races.filter(r => !weekendOver(r) && r.id !== activeRace?.id);
+  const completedRaces = races.filter(r => weekendOver(r));
 
   // The most recently finished round, so the dashboard can offer a one-tap jump
   // straight to how that weekend scored.
@@ -112,13 +112,13 @@ export default function DashboardScreen() {
   // Predictions close (lock) when Practice 1 starts, so an upcoming race shows
   // "Closes" against its FP1 date rather than its race day.
   const statusFor = (r: Race): { label: string; color: string; date: string } => {
-    if (isWeekendOver(r)) return { label: 'Finished', color: colors.textSecondary, date: r.race_time };
+    if (weekendOver(r)) return { label: 'Finished', color: colors.textSecondary, date: r.race_time };
     if (Date.now() < new Date(r.fp1_time).getTime()) return { label: 'Closes', color: colors.accentGreen, date: r.fp1_time };
     return { label: 'Locked', color: colors.redText, date: r.race_time };
   };
 
   const openRace = (r: Race) => {
-    if (isWeekendOver(r)) router.push(`/race/${r.id}/results`);
+    if (weekendOver(r)) router.push(`/race/${r.id}/results`);
     else router.push(`/race/${r.id}`);
   };
 
